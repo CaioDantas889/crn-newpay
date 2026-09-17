@@ -154,13 +154,32 @@
 }
 @media (min-width: 760px) { .board-resumo { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
-/* No celular as colunas ocupam quase a tela inteira e deslizam */
+/* No celular o quadro vira lista: uma etapa embaixo da outra, cada uma
+   abrindo e fechando no toque do cabeçalho */
 @media (max-width: 899px) {
-  .pipe-coluna { flex-basis: 78vw; width: 78vw; max-height: none; }
-  .coluna-corpo { max-height: 62vh; }
-  .board { padding: 8px; }
+  .board {
+    flex-direction: column; overflow-x: visible; overflow-y: visible;
+    padding: 8px; gap: 8px; scroll-snap-type: none;
+  }
+  .pipe-coluna { flex: 1 1 auto; width: 100%; max-height: none; }
+  .coluna-corpo { max-height: none; }
   .board-topo, .board-resumo { padding-left: 8px; padding-right: 8px; }
 }
+
+/* Etapa fechada mostra só o cabeçalho — só faz sentido no celular, onde as
+   etapas ficam empilhadas */
+@media (max-width: 899px) {
+  .pipe-coluna.recolhida .coluna-corpo,
+  .pipe-coluna.recolhida .coluna-rodape { display: none; }
+  .pipe-coluna.recolhida .coluna-topo { border-bottom: none; }
+}
+
+.coluna-topo.clicavel { cursor: pointer; user-select: none; min-height: 42px; }
+.coluna-topo .seta { color: var(--text-3); font-size: 0.7rem; width: 10px; }
+.coluna-topo .total-etapa {
+  margin-left: auto; font-size: 0.7rem; font-weight: 700; color: var(--brand-strong);
+}
+.coluna-topo .total-etapa + .contagem { margin-left: 6px; }
 
 /* Menu de etapa no cartão (alternativa ao arrastar, essencial no celular) */
 .cartao { position: relative; }
@@ -207,3 +226,45 @@
 }
 .cartao-menu button.remover { color: var(--red); border-top: 1px solid var(--line); margin-top: 2px; padding-top: 6px; }
 .cartao-menu button.remover:hover { background: #fff5f5; color: #b91c1c; }
+
+/* ============================== CARTÃO EXPANDIDO ======================== */
+.cartao.aberto {
+  box-shadow: var(--shadow); border-color: var(--line-strong);
+  cursor: default;
+}
+.cartao.aberto .cartao-titulo { white-space: normal; }
+
+.cartao-detalhe {
+  margin-top: 6px; padding-top: 7px;
+  border-top: 1px dashed var(--line-strong);
+  display: flex; flex-direction: column; gap: 8px;
+  animation: abrir-cartao 0.16s ease;
+}
+@keyframes abrir-cartao { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+.detalhe-linhas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.detalhe-linhas > div { min-width: 0; }
+.detalhe-linhas span {
+  display: block; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-3); font-weight: 700;
+}
+.detalhe-linhas b {
+  display: block; font-size: 0.72rem; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.detalhe-dores { display: flex; flex-wrap: wrap; gap: 4px; }
+.detalhe-dores .chip { font-size: 0.62rem; padding: 1px 6px; }
+
+.detalhe-acoes { display: flex; flex-wrap: wrap; gap: 5px; }
+.detalhe-acoes .btn { flex: 1 1 auto; min-width: 84px; }
+
+/* No celular o cartão tem mais espaço: aproveita para mostrar mais */
+@media (max-width: 899px) {
+  .cartao { padding: 10px 11px; }
+  .cartao-titulo { font-size: 0.85rem; }
+  .cartao-linha { font-size: 0.72rem; }
+  .cartao-valor { font-size: 0.8rem; }
+  .detalhe-linhas b { font-size: 0.78rem; }
+  .detalhe-acoes .btn { min-height: 34px; }
+}

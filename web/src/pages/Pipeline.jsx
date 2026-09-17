@@ -6,6 +6,7 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { moeda } from '../lib/date.js';
+import { useTelaPequena } from '../lib/tela.js';
 import { Avatar, Carregando, Stat } from '../components/ui.jsx';
 import NovoCliente from '../components/NovoCliente.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
@@ -25,6 +26,10 @@ export default function Pipeline() {
   const [colunaAlvo, setColunaAlvo] = useState(null);
   const [menuCard, setMenuCard] = useState(null);
   const [excluir, setExcluir] = useState(null);
+  const [cardAberto, setCardAberto] = useState(null);
+  // "perdido" começa fechado no celular: é a etapa que menos interessa no dia a dia
+  const [recolhidas, setRecolhidas] = useState({ perdido: true });
+  const telaPequena = useTelaPequena();
 
   const { dados: equipe } = useRecurso(
     () => (ehGestor ? endpoints.equipe() : Promise.resolve([])),
@@ -73,6 +78,9 @@ export default function Pipeline() {
       toast(err.message, 'erro');
     }
   };
+
+  const alternarEtapa = (chave) =>
+    setRecolhidas((r) => ({ ...r, [chave]: !r[chave] }));
 
   const trocarFiltro = (chave, valor, setter) => {
     setter(valor);
@@ -140,10 +148,12 @@ export default function Pipeline() {
           const tpvEtapa = daEtapa.reduce((s, c) => s + (c.tpvEstimado || 0), 0);
           const participacao = totalCarteira ? Math.round((daEtapa.length / totalCarteira) * 100) : 0;
 
+          const recolhida = telaPequena && recolhidas[chave];
+
           return (
             <section
               key={chave}
-              className={`pipe-coluna${colunaAlvo === chave ? ' alvo' : ''}`}
+              className={`pipe-coluna${colunaAlvo === chave ? ' alvo' : ''}${recolhida ? ' recolhida' : ''}`}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
@@ -158,8 +168,20 @@ export default function Pipeline() {
               }}
             >
               <div className="coluna-faixa" style={{ background: info.cor }} />
-              <header className="coluna-topo">
+
+              {/* No celular o cabeçalho abre e fecha a etapa */}
+              <header
+                className={`coluna-topo${telaPequena ? ' clicavel' : ''}`}
+                onClick={telaPequena ? () => alternarEtapa(chave) : undefined}
+                role={telaPequena ? 'button' : undefined}
+                tabIndex={telaPequena ? 0 : undefined}
+                onKeyDown={telaPequena ? (e) => e.key === 'Enter' && alternarEtapa(chave) : undefined}
+              >
+                {telaPequena && <span className="seta">{recolhida ? '▸' : '▾'}</span>}
                 <span className="nome">{info.label}</span>
+                {telaPequena && daEtapa.length > 0 && (
+                  <span className="total-etapa">{moeda(tpvEtapa)}</span>
+                )}
                 <span className="contagem" style={{ background: info.cor }}>{daEtapa.length}</span>
               </header>
 
@@ -175,7 +197,7 @@ export default function Pipeline() {
                     return (
                       <article
                         key={c.id}
-                        className={`cartao${atrasado ? ' atrasado' : ''}${c.stage === 'fechado' ? ' ganho' : ''}${arrastando === c.id ? ' arrastando' : ''}`}
+                        className={`cartao${atrasado ? ' atrasado' : ''}${c.stage === 'fechado' ? ' ganho' : ''}${arrastando === c.id ? ' arrastando' : ''}${cardAberto === c.id ? ' aberto' : ''}`}
                         style={{ borderLeftColor: atrasado ? undefined : info.cor }}
                         draggable
                         onDragStart={(e) => {
@@ -187,7 +209,10 @@ export default function Pipeline() {
                           setArrastando(null);
                           setColunaAlvo(null);
                         }}
-                        onClick={() => navigate(`/carteira/${c.id}`)}
+                        onClick={() => {
+                          setMenuCard(null);
+                          setCardAberto(cardAberto === c.id ? null : c.id);
+                        }}
                       >
                         <div className="cartao-titulo">{c.company}</div>
 
@@ -258,6 +283,66 @@ export default function Pipeline() {
                             >
                               🗑️ Excluir cliente
                             </button>
+                          </div>
+                        )}
+
+                        {/* Detalhes e ações abrem dentro do próprio cartão */}
+                        {cardAberto === c.id && (
+                          <div className="cartao-detalhe" onClick={(e) => e.stopPropagation()}>
+                            <div className="detalhe-linhas">
+                              <div>
+                                <span>Oportunidade</span>
+                                <b style={{ textTransform: 'capitalize' }}>{c.score} pts · {c.temperature}</b>
+                              </div>
+                              <div>
+                                <span>TPV estimado</span>
+                                <b>{moeda(c.tpvEstimado)}</b>
+                              </div>
+                              <div>
+                                <span>Máquina atual</span>
+                                <b>{meta.maquinas?.[c.diagnostico?.maquinaAtual] ?? 'Sem diagnóstico'}</b>
+                              </div>
+                              <div>
+                                <span>Faturamento</span>
+                                <b>{meta.faturamentos?.[c.diagnostico?.faturamento]?.label ?? '—'}</b>
+                              </div>
+                            </div>
+
+                            {c.diagnostico?.dores?.length > 0 && (
+                              <div className="detalhe-dores">
+                                {c.diagnostico.dores.map((d) => (
+                                  <span key={d} className="chip chip-alerta">{meta.dores?.[d] ?? d}</span>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="detalhe-acoes">
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => navigate(`/carteira/${c.id}`)}
+                              >
+                                Abrir ficha
+                              </button>
+                              {c.phone && (
+                                <a className="btn btn-sm" href={`tel:${c.phone.replace(/\D/g, '')}`}>📞 Ligar</a>
+                              )}
+                              {(c.whatsapp || c.phone) && (
+                                <a
+                                  className="btn btn-sm"
+                                  href={`https://wa.me/55${(c.whatsapp || c.phone).replace(/\D/g, '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  💬 WhatsApp
+                                </a>
+                              )}
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => setMenuCard(menuCard === c.id ? null : c.id)}
+                              >
+                                ⇄ Mover
+                              </button>
+                            </div>
                           </div>
                         )}
                       </article>
