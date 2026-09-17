@@ -1,0 +1,17 @@
+# dependências
+node_modules/
+
+# build
+dist/
+
+# dados locais gerados pelo seed (o banco é recriado com `npm run seed`)
+server/data/db.json
+server/data/uploads/
+
+# ambiente e ferramentas
+.env
+.env.local
+*.log
+.vite/
+.DS_Store
+Thumbs.db
