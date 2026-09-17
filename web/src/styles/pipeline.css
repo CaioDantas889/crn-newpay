@@ -53,6 +53,31 @@
 .topbar-crm .direita { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .select-inline { width: auto; min-width: 120px; padding: 6px 8px; font-size: 0.78rem; }
 
+/* --------------------------------------------------- menu do "+ Novo" ---- */
+.novo-wrap { position: relative; }
+.novo-fundo { position: fixed; inset: 0; z-index: 40; }
+/* Ancorado pela direita: no celular o botão fica colado na borda e o menu,
+   abrindo para a esquerda, cabe inteiro na tela */
+.novo-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  min-width: 190px; max-width: calc(100vw - 20px);
+  box-shadow: var(--shadow-lg);
+}
+.novo-menu .cliente-linha { width: 100%; border: none; background: none; text-align: left; }
+.novo-menu .emoji { font-size: 1rem; }
+.novo-menu .info { font-size: 0.8rem; }
+
+/* No celular a topbar é uma linha só: a busca encolhe e o "+ Novo" fica da
+   mesma altura do campo, sem quebrar para a linha de baixo */
+@media (max-width: 899px) {
+  .topbar-crm { gap: 6px; padding: 8px 10px; flex-wrap: nowrap; }
+  .busca-global { min-width: 0; }
+  .busca-global input { min-height: 40px; }
+  .topbar-crm .filtros { flex: none; flex-wrap: nowrap; }
+  .btn-novo { min-height: 40px; padding: 7px 12px; }
+  .topbar-crm .direita { flex: none; gap: 4px; }
+}
+
 /* ======================================================= BOARD =========== */
 .board-topo {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

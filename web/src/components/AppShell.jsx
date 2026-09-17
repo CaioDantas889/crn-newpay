@@ -140,33 +140,25 @@ export default function AppShell() {
             )}
           </div>
 
-          <div className="filtros" style={{ position: 'relative' }}>
-            <button className="btn btn-brand" onClick={() => setMenuNovo((v) => !v)}>
+          <div className="filtros novo-wrap">
+            <button className="btn btn-brand btn-novo" onClick={() => setMenuNovo((v) => !v)}>
               + Novo
             </button>
             {menuNovo && (
               <>
-                <div
-                  style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-                  onClick={() => setMenuNovo(false)}
-                  aria-hidden="true"
-                />
-                <div
-                  className="card"
-                  style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50, minWidth: 190, boxShadow: 'var(--shadow-lg)' }}
-                >
+                <div className="novo-fundo" onClick={() => setMenuNovo(false)} aria-hidden="true" />
+                <div className="card novo-menu">
                   {acoesNovo.map((a) => (
                     <button
                       key={a.chave}
                       className="cliente-linha"
-                      style={{ width: '100%', border: 'none', background: 'none' }}
                       onClick={() => {
                         setMenuNovo(false);
                         setModal(a.chave);
                       }}
                     >
-                      <span style={{ fontSize: '1rem' }}>{a.emoji}</span>
-                      <span className="info forte" style={{ fontSize: '0.8rem' }}>{a.label}</span>
+                      <span className="emoji">{a.emoji}</span>
+                      <span className="info forte">{a.label}</span>
                     </button>
                   ))}
                 </div>
