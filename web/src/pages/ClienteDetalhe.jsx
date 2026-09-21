@@ -20,7 +20,7 @@ export default function ClienteDetalhe() {
 
   const { dados: cliente, carregando, erro, recarregar } = useRecurso(() => endpoints.cliente(id), [id]);
   const [modal, setModal] = useState(params.get('diagnostico') ? 'diagnostico' : null);
-  const [proposta, setProposta] = useState({ maquinas: 1, taxaOfertada: 1.89 });
+  const [proposta, setProposta] = useState({ maquinas: 1, taxaOfertada: '' });
   const [excluir, setExcluir] = useState(null);
 
   if (carregando) return <div className="page"><Carregando linhas={6} /></div>;
@@ -229,9 +229,9 @@ export default function ClienteDetalhe() {
               {n.maquinas}x
             </span>
             <div className="info">
-              <b>{n.maquinas} máquina(s){n.taxaOfertada ? ` · taxa ${n.taxaOfertada}%` : ''}</b>
+              <b>{n.maquinas} máquina(s){n.taxaOfertada ? ` · tabela ${n.taxaOfertada}` : ''}</b>
               <div className="mini">
-                {n.taxaOfertada ? `Taxa ${n.taxaOfertada}% · ` : ''}
+                {n.taxaOfertada ? `Tabela ${n.taxaOfertada} · ` : ''}
                 proposta em {diaMes(n.propostaAt)}
                 {n.ativacaoAt ? ` · ativada em ${diaMes(n.ativacaoAt)}` : ''}
               </div>
@@ -264,11 +264,18 @@ export default function ClienteDetalhe() {
               />
             </div>
             <div className="campo">
-              <label htmlFor="pr-taxa">Taxa ofertada (%)</label>
-              <input
-                id="pr-taxa" type="number" step="0.01" className="input" value={proposta.taxaOfertada}
-                onChange={(e) => setProposta({ ...proposta, taxaOfertada: Number(e.target.value) })}
-              />
+              <label htmlFor="pr-taxa">Tabela de taxa</label>
+              <select
+                id="pr-taxa"
+                className="select"
+                value={proposta.taxaOfertada}
+                onChange={(e) => setProposta({ ...proposta, taxaOfertada: e.target.value })}
+              >
+                <option value="">Escolha a tabela</option>
+                {(meta?.tabelasTaxa ?? []).map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </div>
           </div>
           <button className="btn btn-primary btn-block" onClick={enviarProposta}>
@@ -414,7 +421,7 @@ export default function ClienteDetalhe() {
       {excluir?.tipo === 'negocio' && (
         <ConfirmarExclusao
           titulo="Excluir negócio"
-          alvo={`${excluir.dado.maquinas} máquina(s)${excluir.dado.taxaOfertada ? ` · taxa ${excluir.dado.taxaOfertada}%` : ''}`}
+          alvo={`${excluir.dado.maquinas} máquina(s)${excluir.dado.taxaOfertada ? ` · tabela ${excluir.dado.taxaOfertada}` : ''}`}
           descricao={
             excluir.dado.status === 'ativado'
               ? 'Atenção: esta venda está ativada e conta na sua meta do mês.'

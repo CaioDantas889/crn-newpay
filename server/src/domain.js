@@ -42,6 +42,25 @@ export const SEGMENTOS = {
   outros:              'Outros',
 };
 
+/* ------------------------------------------------- tabelas de taxa ---- */
+// A NewPay negocia por tabela, não por percentual solto: o vendedor escolhe
+// qual tabela ofertou. Para incluir uma nova, basta acrescentar aqui — a lista
+// vai para a interface pelo /api/meta.
+
+export const TABELAS_TAXA = [
+  '2mm',
+  '3mm',
+  'autos',
+  'geral d0',
+  'd0 retorno',
+  'material de construção',
+  'link12',
+  'especial',
+  '14m',
+  '15m',
+  '079',
+];
+
 /* --------------------------------------------- diagnóstico comercial */
 
 export const MAQUINAS = {

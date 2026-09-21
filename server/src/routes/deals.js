@@ -37,7 +37,7 @@ router.post('/', (req, res) => {
     clientId: cliente.id,
     userId: req.user.id,
     maquinas,
-    taxaOfertada: Number(b.taxaOfertada) || null,
+    taxaOfertada: String(b.taxaOfertada ?? '').trim().slice(0, 40) || null,
     status,
     propostaAt: agora,
     fechamentoAt: status === 'fechado' || status === 'ativado' ? agora : null,

@@ -54,6 +54,7 @@ ok((await api('/api/events')).status === 401, 'rota protegida sem token devolve 
 
 const meta = await api('/api/meta', { token: vendedor });
 ok(Object.keys(meta.json?.segmentos ?? {}).length === 10, 'vocabulário traz os 10 segmentos');
+ok(meta.json?.tabelasTaxa?.includes('2mm'), 'vocabulario traz as tabelas de taxa', meta.json?.tabelasTaxa?.join(' · '));
 ok(Object.keys(meta.json?.maquinas ?? {}).length >= 9, 'lista de máquinas concorrentes');
 ok(meta.json?.niveis?.length === 5, 'níveis do ranking', meta.json.niveis.map((n) => n.label).join(' < '));
 ok(meta.json?.kpisDiarios?.length === 4, 'os 4 KPIs diarios obrigatorios', meta.json.kpisDiarios.map((k) => k.label).join(' · '));
@@ -173,7 +174,7 @@ ok((await fetch(`${BASE}${visitaFoto.json.visita.fotos[0].url}`)).ok, 'foto fica
 
 const visitaFechada = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: novo.json.id, resultado: 'fechado', notes: 'Fechou na hora.', venda: { maquinas: 2, taxaOfertada: 1.89 } },
+  body: { clientId: novo.json.id, resultado: 'fechado', notes: 'Fechou na hora.', venda: { maquinas: 2, taxaOfertada: '2mm' } },
 });
 ok(visitaFechada.json?.negocio?.status === 'fechado', 'visita "fechado" já abre o negócio', `${visitaFechada.json?.negocio?.maquinas} máquinas`);
 ok(visitaFechada.json?.cliente?.stage === 'fechado', 'cliente vai para "fechado" no funil');
@@ -186,13 +187,38 @@ secao('Propostas, vendas e ativações');
 
 const proposta = await api('/api/deals', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, maquinas: 1, taxaOfertada: 1.99 },
+  body: { clientId: alvo.id, maquinas: 1, taxaOfertada: 'geral d0' },
 });
 ok(proposta.status === 201 && proposta.json?.status === 'proposta', 'enviar proposta');
 
 const ativado = await api(`/api/deals/${proposta.json.id}`, { token: vendedor, method: 'PATCH', body: { status: 'ativado' } });
 ok(ativado.json?.status === 'ativado' && ativado.json?.ativacaoAt, 'ativar a máquina');
 ok(ativado.json?.tpvRealizado === undefined, 'negocio ativado nao carrega TPV');
+
+// O MediaRecorder do Chrome manda "audio/webm;codecs=opus": ja descartou audio
+// de visita em silencio uma vez, entao fica travado aqui.
+const visitaComAudio = await api('/api/visits', {
+  token: vendedor, method: 'POST',
+  body: {
+    clientId: alvo.id, resultado: 'interessado', notes: 'audio do smoke',
+    audio: { dataUrl: `data:audio/webm;codecs=opus;base64,${Buffer.from('audio').toString('base64')}` },
+  },
+});
+ok(Boolean(visitaComAudio.json?.visita?.audio?.url), 'audio gravado pelo celular e guardado', visitaComAudio.json?.visita?.audio?.url);
+ok((visitaComAudio.json?.avisos ?? []).length === 0, 'anexo aceito nao gera aviso');
+ok((await fetch(`${BASE}${visitaComAudio.json.visita.audio.url}`)).status === 200, 'o audio abre pela URL');
+
+const visitaAudioRuim = await api('/api/visits', {
+  token: vendedor, method: 'POST',
+  body: { clientId: alvo.id, resultado: 'nao_interessado', audio: { dataUrl: 'data:audio/aiff;base64,QQ==' } },
+});
+ok(
+  visitaAudioRuim.json?.visita?.audio === null && visitaAudioRuim.json?.avisos?.length === 1,
+  'formato recusado vira aviso em vez de sumir calado'
+);
+await api(`/api/visits/${visitaComAudio.json.visita.id}`, { token: vendedor, method: 'DELETE' });
+await api(`/api/visits/${visitaAudioRuim.json.visita.id}`, { token: vendedor, method: 'DELETE' });
+
 
 const dashDepois = await api('/api/dashboard', { token: vendedor });
 ok(
@@ -404,6 +430,52 @@ const eventoTemp = await api('/api/events', {
   token: vendedor, method: 'POST', body: { title: 'Compromisso a remover', type: 'visita', start: `${hoje}T19:00:00` },
 });
 ok((await api(`/api/events/${eventoTemp.json.id}`, { token: vendedor, method: 'DELETE' })).json?.ok, 'excluir compromisso');
+
+/* ---------------------------------------------------------- expediente */
+secao('Expediente (entrada e saida)');
+
+// O smoke roda contra um banco em uso: fecha o que estiver aberto antes
+await api('/api/jornada/saida', { token: vendedor, method: 'POST' });
+ok(
+  (await api('/api/jornada/saida', { token: vendedor, method: 'POST' })).status === 409,
+  'nao encerra expediente que nao comecou'
+);
+
+const entrada = await api('/api/jornada/entrada', {
+  token: vendedor, method: 'POST', body: { lat: -6.3594, lng: -39.2986, precisao: 12 },
+});
+ok(entrada.status === 201 && entrada.json?.emAndamento, 'entrada registrada');
+ok(entrada.json?.inicioLocal?.lat === -6.3594 && entrada.json?.inicioLocal?.precisao === 12, 'localizacao da entrada guardada');
+ok(
+  (await api('/api/jornada/entrada', { token: vendedor, method: 'POST', body: {} })).status === 409,
+  'nao abre dois expedientes ao mesmo tempo'
+);
+
+const painelJornada = await api('/api/jornada/equipe', { token: gestor });
+ok(painelJornada.json?.emCampo >= 1, 'gestor ve quem esta em campo', `${painelJornada.json?.emCampo} em campo`);
+ok((await api('/api/jornada/equipe', { token: vendedor })).status === 403, 'vendedor nao ve o painel de expediente');
+
+const saida = await api('/api/jornada/saida', { token: vendedor, method: 'POST', body: { lat: -6.36, lng: -39.3 } });
+ok(saida.status === 200 && !saida.json?.emAndamento, 'saida registrada');
+ok(typeof saida.json?.duracaoMin === 'number', 'duracao calculada', `${saida.json?.duracaoMin} min`);
+
+const semGps = await api('/api/jornada/entrada', { token: vendedor, method: 'POST', body: {} });
+ok(semGps.json?.inicioLocal === null, 'sem GPS o expediente abre mesmo assim, marcado');
+await api('/api/jornada/saida', { token: vendedor, method: 'POST', body: {} });
+
+ok(
+  (await api(`/api/jornada/${saida.json.id}`, { token: vendedor, method: 'PATCH', body: { justificativa: 'tentativa' } })).status === 403,
+  'vendedor nao corrige o proprio ponto'
+);
+ok(
+  (await api(`/api/jornada/${saida.json.id}`, { token: gestor, method: 'PATCH', body: { fimAt: new Date().toISOString() } })).status === 400,
+  'correcao exige justificativa'
+);
+const corrigido = await api(`/api/jornada/${saida.json.id}`, {
+  token: gestor, method: 'PATCH',
+  body: { fimAt: new Date(Date.now() + 3600_000).toISOString(), justificativa: 'esqueceu de bater a saida' },
+});
+ok(corrigido.json?.justificativa && corrigido.json?.duracaoMin >= 60, 'gestor corrige com motivo registrado');
 
 /* ------------------------------------------------ biblioteca comercial */
 secao('Manutencao da biblioteca');

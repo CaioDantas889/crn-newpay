@@ -22,6 +22,7 @@ import rankingRoutes from './routes/ranking.js';
 import contentRoutes from './routes/content.js';
 import announcementRoutes from './routes/announcements.js';
 import notificationRoutes from './routes/notifications.js';
+import jornadaRoutes from './routes/jornada.js';
 import managerRoutes from './routes/manager.js';
 
 /* ------------------------------------------------- checagens de ambiente */
@@ -99,6 +100,7 @@ app.get('/api/meta', (req, res) =>
     announcementCategories: dominio.ANNOUNCEMENT_CATEGORIES,
     returnPresets: dominio.RETURN_PRESETS,
     segmentos: dominio.SEGMENTOS,
+    tabelasTaxa: dominio.TABELAS_TAXA,
     maquinas: dominio.MAQUINAS,
     faturamentos: dominio.FATURAMENTOS,
     volumesCartao: dominio.VOLUMES_CARTAO,
@@ -126,6 +128,7 @@ app.use('/api/ranking', rankingRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/jornada', jornadaRoutes);
 app.use('/api/gestor', managerRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));

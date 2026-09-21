@@ -17,6 +17,7 @@ export default function Mais() {
     { to: '/calendario', emoji: '📅', label: 'Calendário' },
     { to: `/dia/${dateKey()}`, emoji: '📆', label: 'Agenda de hoje' },
     { to: '/tarefas', emoji: '📝', label: 'Tarefas' },
+    { to: '/expediente', emoji: '⏱️', label: 'Expediente' },
     { to: '/fechar-dia', emoji: '✅', label: 'Fechar o dia' },
     { to: '/biblioteca', emoji: '📚', label: 'Biblioteca' },
     { to: '/objecoes', emoji: '💬', label: 'Objeções' },

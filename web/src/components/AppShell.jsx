@@ -86,6 +86,9 @@ export default function AppShell() {
         <NavLink to={`/dia/${hoje}`} className={railClasse}>
           <span className="ico">📅</span> Agenda
         </NavLink>
+        <NavLink to="/expediente" className={railClasse}>
+          <span className="ico">⏱️</span> Expediente
+        </NavLink>
         <NavLink to="/carteira" className={railClasse}>
           <span className="ico">🤝</span> Carteira
         </NavLink>

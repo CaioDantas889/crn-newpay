@@ -42,7 +42,7 @@ router.get('/', (req, res) => {
 /**
  * POST /api/visits
  * body: { clientId, resultado, notes, fotos[], audio, lat, lng, eventId,
- *         retornarEmDias, venda: { maquinas, taxaOfertada } }
+ *         retornarEmDias, venda: { maquinas, taxaOfertada: 'nome da tabela' } }
  */
 router.post('/', (req, res) => {
   const b = req.body ?? {};
@@ -53,6 +53,22 @@ router.post('/', (req, res) => {
   if (!meta) return res.status(400).json({ error: 'Informe o resultado da visita.' });
 
   const agora = new Date();
+
+  // Anexo recusado (formato estranho, arquivo grande demais) não pode sumir
+  // calado: a visita é salva do mesmo jeito, mas o vendedor fica sabendo.
+  const fotos = salvarVarios(b.fotos, `visita_${cliente.id}`);
+  const audio = b.audio ? salvarDataUrl(b.audio?.dataUrl ?? b.audio, `audio_${cliente.id}`) : null;
+
+  const avisos = [];
+  const fotosEnviadas = (b.fotos ?? []).length;
+  if (fotosEnviadas > fotos.length) {
+    avisos.push(`${fotosEnviadas - fotos.length} foto(s) não foram aceitas (formato ou tamanho).`);
+  }
+  if (b.audio && !audio) {
+    avisos.push('O áudio não foi aceito pelo servidor e não ficou guardado.');
+  }
+  if (avisos.length) console.warn(`[visitas] anexo recusado: ${avisos.join(' ')}`);
+
   const visita = insert('visits', {
     id: id('vst'),
     clientId: cliente.id,
@@ -60,8 +76,8 @@ router.post('/', (req, res) => {
     at: agora.toISOString(),
     resultado: b.resultado,
     notes: b.notes ?? '',
-    fotos: salvarVarios(b.fotos, `visita_${cliente.id}`),
-    audio: b.audio ? salvarDataUrl(b.audio?.dataUrl ?? b.audio, `audio_${cliente.id}`) : null,
+    fotos,
+    audio,
     lat: b.lat ?? cliente.lat,
     lng: b.lng ?? cliente.lng,
     duracaoMin: Number(b.duracaoMin) || null,
@@ -117,7 +133,7 @@ router.post('/', (req, res) => {
       clientId: cliente.id,
       userId: req.user.id,
       maquinas,
-      taxaOfertada: Number(b.venda?.taxaOfertada) || null,
+      taxaOfertada: String(b.venda?.taxaOfertada ?? '').trim().slice(0, 40) || null,
       status: 'fechado',
       propostaAt: agora.toISOString(),
       fechamentoAt: agora.toISOString(),
@@ -134,6 +150,7 @@ router.post('/', (req, res) => {
     retorno: retorno ? expandEvent(retorno, req.user.id) : null,
     negocio,
     cliente: find('clients', cliente.id),
+    avisos,
   });
 });
 

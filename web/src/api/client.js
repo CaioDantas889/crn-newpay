@@ -135,6 +135,13 @@ export const endpoints = {
   excluirMaterial: (id) => api.del(`/content/library/${id}`),
   objecoes: (clientId) => api.get(`/content/objections${qs({ clientId })}`),
 
+  // expediente (ponto de entrada e saída)
+  jornada: (params) => api.get(`/jornada${qs(params)}`),
+  iniciarExpediente: (local) => api.post('/jornada/entrada', local ?? {}),
+  encerrarExpediente: (local) => api.post('/jornada/saida', local ?? {}),
+  jornadaEquipe: (data) => api.get(`/jornada/equipe${qs({ data })}`),
+  corrigirExpediente: (id, dados) => api.patch(`/jornada/${id}`, dados),
+
   // notificações e mural
   notificacoes: () => api.get('/notifications'),
   marcarNotificacaoLida: (id) => api.post(`/notifications/${id}/lida`),

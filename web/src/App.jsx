@@ -14,6 +14,7 @@ import Biblioteca from './pages/Biblioteca.jsx';
 import Objecoes from './pages/Objecoes.jsx';
 import Avisos from './pages/Avisos.jsx';
 import FecharDia from './pages/FecharDia.jsx';
+import Expediente from './pages/Expediente.jsx';
 import Mais from './pages/Mais.jsx';
 import Equipe from './pages/Equipe.jsx';
 import PainelGestor from './pages/PainelGestor.jsx';
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/dia" element={<AgendaDia />} />
           <Route path="/dia/:data" element={<AgendaDia />} />
           <Route path="/tarefas" element={<Tarefas />} />
+          <Route path="/expediente" element={<Expediente />} />
           <Route path="/carteira" element={<Carteira />} />
           <Route path="/carteira/:id" element={<ClienteDetalhe />} />
           <Route path="/clientes" element={<Navigate to="/carteira" replace />} />

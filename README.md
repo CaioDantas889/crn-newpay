@@ -181,6 +181,18 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
 - Ícones gerados por script (`npm --prefix web run icones`), sem dependência de
   ferramenta de design
 
+### Expediente (entrada e saída)
+- Um botão grande: **Iniciar expediente** / **Encerrar expediente**, com o
+  relógio do tempo em campo e o histórico dos últimos 14 dias
+- A **localização é gravada no momento da batida** — entrada e saída — e só
+  nesse momento: o CRM não acompanha ninguém ao longo do dia
+- Sem GPS disponível o expediente abre do mesmo jeito, marcado como "sem
+  localização", porque travar o começo do dia por causa de sinal seria pior
+- Não deixa abrir dois expedientes ao mesmo tempo nem encerrar o que não
+  começou; jornada esquecida aberta por mais de 18h fica marcada para revisão
+- O gestor vê quem já começou o dia (`/api/jornada/equipe`) e corrige horário
+  errado com justificativa obrigatória, que fica registrada no próprio dia
+
 ### Cadastro da equipe (gestor)
 - Admite vendedor, gestor ou diretoria com e-mail de acesso e **senha
   provisória gerada na hora** (aparece uma vez, para entregar à pessoa)
@@ -371,7 +383,7 @@ server/
     auth.js           login, hash de senha, token e senha provisória
     seed.js           base de demonstração (e --vazio para produção)
     routes/           auth, users, dashboard, clients, visits, deals, kpi,
-                      ranking, content, events, tasks,
+                      ranking, content, events, tasks, jornada,
                       announcements, notifications, manager
   scripts/
     smoke.mjs             verificação ponta a ponta da API
@@ -379,7 +391,7 @@ server/
 web/
   src/
     pages/            Início, Carteira, Cliente, Calendário, Agenda do dia,
-                      Tarefas, Ranking, Biblioteca,
+                      Tarefas, Expediente, Ranking, Biblioteca,
                       Objeções, Avisos, Fechar o dia, Painel do gestor,
                       Equipe
     components/       AppShell, RegistrarVisita, DiagnosticoModal,

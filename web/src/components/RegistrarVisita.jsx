@@ -84,8 +84,10 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const [fotos, setFotos] = useState([]);
   const [audio, setAudio] = useState(null);
   const [gravando, setGravando] = useState(false);
+  const [preparandoAudio, setPreparandoAudio] = useState(false);
+  const [audioErro, setAudioErro] = useState(null);
   const [retornarEmDias, setRetornarEmDias] = useState(3);
-  const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: 1.89 });
+  const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: '' });
   const [local, setLocal] = useState(null);
   const [localErro, setLocalErro] = useState(null);
   const [buscandoLocal, setBuscandoLocal] = useState(false);
@@ -93,6 +95,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
 
   const gravadorRef = useRef(null);
   const pedacosRef = useRef([]);
+  const pendenteRef = useRef(null);
   const impedimentoAudio = verificarSuporteAudio();
 
   // Busca de cliente só quando a visita não veio de um cliente específico
@@ -144,16 +147,29 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
     e.target.value = '';
   };
 
+  /**
+   * Encerra a gravação e só resolve quando o arquivo está pronto.
+   * É o que impede o áudio de se perder quando o vendedor aperta "Salvar
+   * visita" com a gravação ainda rodando — que era o caminho natural de quem
+   * está com pressa na porta do cliente.
+   */
+  const pararGravacao = () =>
+    new Promise((resolve) => {
+      const gravador = gravadorRef.current;
+      if (!gravador || gravador.state === 'inactive') return resolve(audio);
+      pendenteRef.current = resolve;
+      setPreparandoAudio(true);
+      gravador.stop();
+    });
+
   const gravarAudio = async () => {
-    if (gravando) {
-      gravadorRef.current?.stop();
-      return;
-    }
+    if (gravando) return pararGravacao();
 
     // Antes de pedir o microfone, diz o que impede — em vez de falhar no clique
     // com uma mensagem genérica.
     if (impedimentoAudio) return toast(impedimentoAudio, 'erro');
 
+    setAudioErro(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const gravador = new MediaRecorder(stream);
@@ -162,8 +178,17 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       gravador.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(pedacosRef.current, { type: gravador.mimeType || 'audio/webm' });
-        setAudio({ dataUrl: await lerArquivo(blob), duracao: null });
+
+        const gravado = blob.size
+          ? { dataUrl: await lerArquivo(blob), duracao: null, tamanho: blob.size }
+          : null;
+        if (!gravado) setAudioErro('A gravação saiu vazia. Tente de novo, falando por alguns segundos.');
+
+        setAudio(gravado);
         setGravando(false);
+        setPreparandoAudio(false);
+        pendenteRef.current?.(gravado);
+        pendenteRef.current = null;
       };
       gravadorRef.current = gravador;
       gravador.start();
@@ -171,7 +196,10 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
     } catch (erro) {
       console.warn('[audio] microfone recusado:', erro);
       setGravando(false);
-      toast(MOTIVOS_MICROFONE[erro?.name] ?? `Não consegui acessar o microfone (${erro?.name ?? 'erro'}). Anexe um arquivo de áudio.`, 'erro');
+      setPreparandoAudio(false);
+      const motivo = MOTIVOS_MICROFONE[erro?.name] ?? `Não consegui acessar o microfone (${erro?.name ?? 'erro'}).`;
+      setAudioErro(motivo);
+      toast(motivo, 'erro');
     }
   };
 
@@ -181,12 +209,16 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
 
     setSalvando(true);
     try {
+      // Gravação em andamento: encerra e espera o arquivo, em vez de salvar a
+      // visita sem o áudio que o vendedor acabou de gravar.
+      const audioFinal = gravando ? await pararGravacao() : audio;
+
       const resposta = await endpoints.registrarVisita({
         clientId: cliente.id,
         resultado,
         notes,
         fotos,
-        audio,
+        audio: audioFinal,
         eventId,
         lat: local?.lat,
         lng: local?.lng,
@@ -207,6 +239,9 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
               ? `Visita registrada. Retorno agendado para ${dataRetorno}.`
               : 'Visita registrada.'
       );
+      // Anexo que o servidor recusou vira aviso na tela, não desaparece calado
+      for (const aviso of resposta.avisos ?? []) toast(aviso, 'erro');
+
       recarregarNotificacoes();
       onRegistrado?.(resposta);
       onFechar();
@@ -297,11 +332,18 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                   />
                 </div>
                 <div className="campo">
-                  <label htmlFor="rv-taxa">Taxa ofertada (%)</label>
-                  <input
-                    id="rv-taxa" type="number" step="0.01" className="input" value={venda.taxaOfertada}
-                    onChange={(e) => setVenda({ ...venda, taxaOfertada: Number(e.target.value) })}
-                  />
+                  <label htmlFor="rv-taxa">Tabela de taxa</label>
+                  <select
+                    id="rv-taxa"
+                    className="select"
+                    value={venda.taxaOfertada}
+                    onChange={(e) => setVenda({ ...venda, taxaOfertada: e.target.value })}
+                  >
+                    <option value="">Escolha a tabela</option>
+                    {(meta?.tabelasTaxa ?? []).map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <p className="mini">
@@ -365,28 +407,35 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
           <div className="campo">
             <label>Áudio rápido</label>
             {audio ? (
-              <div className="gravador">
-                <audio controls src={audio.dataUrl} style={{ flex: 1, height: 38 }} />
-                <button className="btn btn-ghost btn-sm" onClick={() => setAudio(null)}>Remover</button>
-              </div>
+              <>
+                <div className="gravador">
+                  <audio controls src={audio.dataUrl} style={{ flex: 1, height: 38 }} />
+                  <button className="btn btn-ghost btn-sm" onClick={() => setAudio(null)}>Remover</button>
+                </div>
+                <p className="mini">
+                  🎙️ Áudio anexado{audio.tamanho ? ` · ${Math.max(1, Math.round(audio.tamanho / 1024))} KB` : ''} —
+                  vai junto ao salvar a visita.
+                </p>
+              </>
             ) : (
               <>
                 <div className="gravador">
                   <button
                     className={`btn ${gravando ? 'btn-danger' : ''}`}
                     onClick={gravarAudio}
-                    disabled={Boolean(impedimentoAudio)}
+                    disabled={Boolean(impedimentoAudio) || preparandoAudio}
                     title={impedimentoAudio ?? undefined}
                   >
-                    {gravando ? '⏹ Parar gravação' : '🎙️ Gravar áudio'}
+                    {preparandoAudio ? '⏳ Preparando...' : gravando ? '⏹ Parar gravação' : '🎙️ Gravar áudio'}
                   </button>
                   {gravando && (
                     <span className="linha mini">
-                      <span className="bolinha" /> gravando...
+                      <span className="bolinha" /> gravando... toque em parar quando terminar
                     </span>
                   )}
                 </div>
                 {impedimentoAudio && <p className="mini">{impedimentoAudio} Você ainda pode anexar um arquivo de áudio.</p>}
+                {audioErro && !impedimentoAudio && <p className="mini erro-campo">{audioErro}</p>}
               </>
             )}
           </div>

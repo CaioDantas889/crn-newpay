@@ -291,3 +291,10 @@
   color: var(--text-3); font-size: 0.78rem; line-height: 1; padding: 0;
 }
 .btn-remover:hover { background: #fff5f5; border-color: #f3c7c7; color: var(--red); }
+
+/* ========================================================== EXPEDIENTE === */
+.expediente { display: flex; flex-direction: column; gap: 14px; }
+.expediente.aberto { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
+.expediente-estado { display: flex; flex-direction: column; gap: 2px; }
+.expediente-relogio { font-size: 2.2rem; line-height: 1.1; color: var(--text); }
+.expediente.aberto .expediente-relogio { color: var(--brand-strong); }

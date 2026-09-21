@@ -8,7 +8,7 @@ import { replace, id, DB_PATH } from './store.js';
 import { hashPassword } from './auth.js';
 import { config } from './config.js';
 import { addDays, atHour, dateKey, startOfDay } from './lib/dates.js';
-import { calcularScore, temperaturaPorScore } from './domain.js';
+import { TABELAS_TAXA, calcularScore, temperaturaPorScore } from './domain.js';
 
 /* ------------------------------------------------- banco vazio (produção) */
 // `npm run seed:vazio` cria o banco sem nenhum dado fictício: só o primeiro
@@ -286,7 +286,7 @@ for (const cli of clients) {
     clientId: cli.id,
     userId: cli.ownerId,
     maquinas,
-    taxaOfertada: Number((1.49 + rnd()).toFixed(2)),
+    taxaOfertada: pick(TABELAS_TAXA),
     status: ativado ? 'ativado' : fechado ? 'fechado' : cli.stage === 'negociacao' ? 'negociacao' : 'proposta',
     propostaAt: iso(propostaEm),
     fechamentoAt: fechado ? iso(addDays(propostaEm, int(1, 10))) : null,
@@ -309,7 +309,7 @@ for (const v of vendedores) {
       clientId: cli.id,
       userId: v.id,
       maquinas,
-      taxaOfertada: Number((1.49 + rnd()).toFixed(2)),
+      taxaOfertada: pick(TABELAS_TAXA),
       status: chance(0.75) ? 'ativado' : 'fechado',
       propostaAt: iso(addDays(quando, -int(1, 6))),
       fechamentoAt: iso(quando),

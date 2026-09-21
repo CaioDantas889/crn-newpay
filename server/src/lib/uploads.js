@@ -41,10 +41,17 @@ export const tiposAceitos = () => Object.keys(EXTENSOES);
 export function salvarDataUrl(dataUrl, prefixo = 'anexo') {
   if (typeof dataUrl !== 'string') return null;
 
-  const match = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/);
+  // O cabeçalho pode trazer parâmetros: o MediaRecorder do Chrome manda
+  // "data:audio/webm;codecs=opus;base64,..." — ignorar isso descartava todo
+  // áudio gravado pelo celular.
+  const match = dataUrl.match(/^data:([^,]+),(.+)$/);
   if (!match) return null;
 
-  const [, mime, base64] = match;
+  const [, cabecalho, base64] = match;
+  const partes = cabecalho.split(';').map((p) => p.trim());
+  if (!partes.includes('base64')) return null;
+
+  const mime = partes[0].toLowerCase();
   const extensao = EXTENSOES[mime];
   if (!extensao) return null;
 

@@ -30,6 +30,7 @@ const EMPTY = {
   notificationState: [],
   activity: [],
   visits: [],
+  jornadas: [],
   deals: [],
   goals: [],
   dailyKpis: [],

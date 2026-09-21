@@ -51,7 +51,11 @@ router.post('/', (req, res) => {
 router.patch('/:id', (req, res) => {
   const tarefa = find('tasks', req.params.id);
   if (!tarefa) return res.status(404).json({ error: 'Tarefa não encontrada.' });
-  if (tarefa.ownerId !== req.user.id) return res.status(403).json({ error: 'Tarefa de outro usuário.' });
+  // A gestão mexe na tarefa de qualquer um, como já faz com cliente, visita,
+  // venda e compromisso — antes a tarefa era a única exceção.
+  if (tarefa.ownerId !== req.user.id && !isManager(req.user)) {
+    return res.status(403).json({ error: 'Tarefa de outro usuário.' });
+  }
 
   const patch = {};
   for (const campo of ['title', 'kind', 'dueAt', 'clientId']) {
@@ -68,7 +72,11 @@ router.patch('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const tarefa = find('tasks', req.params.id);
   if (!tarefa) return res.status(404).json({ error: 'Tarefa não encontrada.' });
-  if (tarefa.ownerId !== req.user.id) return res.status(403).json({ error: 'Tarefa de outro usuário.' });
+  // A gestão mexe na tarefa de qualquer um, como já faz com cliente, visita,
+  // venda e compromisso — antes a tarefa era a única exceção.
+  if (tarefa.ownerId !== req.user.id && !isManager(req.user)) {
+    return res.status(403).json({ error: 'Tarefa de outro usuário.' });
+  }
   remove('tasks', tarefa.id);
   res.json({ ok: true });
 });
