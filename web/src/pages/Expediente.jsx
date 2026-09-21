@@ -135,14 +135,7 @@ export default function Expediente() {
               : '▶️ Iniciar expediente'}
         </button>
 
-        {aberta && (
-          <p className="mini">
-            {aberta.inicioLocal
-              ? `📍 Entrada registrada em ${aberta.inicioLocal.lat.toFixed(4)}, ${aberta.inicioLocal.lng.toFixed(4)}` +
-                (aberta.inicioLocal.precisao ? ` (~${aberta.inicioLocal.precisao} m)` : '')
-              : '📍 Entrada registrada sem localização do aparelho.'}
-          </p>
-        )}
+        {aberta && <Local rotulo="Entrada registrada" local={aberta.inicioLocal} endereco={aberta.inicioEndereco} />}
       </div>
 
       <div className="card">
@@ -169,10 +162,10 @@ export default function Expediente() {
                 <b>{dia(j.data)}</b>
                 <div className="mini">
                   {hora(j.inicioAt)} às {j.fimAt ? hora(j.fimAt) : 'agora'}
-                  {j.inicioLocal ? ' · 📍 com localização' : ' · sem localização'}
                   {j.revisar ? ' · ⚠️ revisar' : ''}
                   {j.justificativa ? ` · corrigido: ${j.justificativa}` : ''}
                 </div>
+                <Local rotulo="Entrada" local={j.inicioLocal} endereco={j.inicioEndereco} compacto />
               </div>
               <span className="chip">{j.emAndamento ? 'em campo' : duracao(j.duracaoMin)}</span>
             </div>
@@ -180,5 +173,34 @@ export default function Expediente() {
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------- local ---- */
+
+/**
+ * Onde a batida aconteceu. Mostra o nome da rua quando o servidor conseguiu
+ * descobrir, e sempre deixa o link do mapa — que funciona mesmo quando a
+ * conversão do endereço falhou.
+ */
+function Local({ rotulo, local, endereco, compacto }) {
+  if (!local) {
+    return <p className="mini">📍 {rotulo} sem localização do aparelho.</p>;
+  }
+
+  const coordenada = `${local.lat.toFixed(4)}, ${local.lng.toFixed(4)}`;
+
+  return (
+    <p className="mini">
+      📍 {compacto ? '' : `${rotulo} em `}
+      {endereco ? <b>{endereco}</b> : coordenada}
+      {local.precisao ? ` (~${local.precisao} m)` : ''}
+      {local.mapa && (
+        <>
+          {' · '}
+          <a href={local.mapa} target="_blank" rel="noreferrer">ver no mapa</a>
+        </>
+      )}
+    </p>
   );
 }

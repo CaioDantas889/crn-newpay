@@ -46,6 +46,12 @@ export const config = {
   servirFront: booleano(process.env.NEWPAY_SERVIR_FRONT, producao),
   frontDir: texto(process.env.NEWPAY_FRONT_DIR, path.join(raizServidor, '..', 'web', 'dist')),
 
+  // Nome da rua na batida de ponto: consulta o Nominatim (OpenStreetMap) com a
+  // coordenada. É a única chamada a serviço externo do CRM — desligue com
+  // NEWPAY_GEOCODIFICAR=false se preferir guardar só latitude e longitude.
+  geocodificar: booleano(process.env.NEWPAY_GEOCODIFICAR, true),
+  contatoGeocodificacao: texto(process.env.NEWPAY_CONTATO, 'crm@newpay.com.br'),
+
   // Origens liberadas no CORS. Vazio = só mesma origem (front servido aqui).
   origens: lista(process.env.NEWPAY_ORIGINS),
 

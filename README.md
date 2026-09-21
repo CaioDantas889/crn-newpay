@@ -7,6 +7,7 @@ para a meta e quem precisa de retorno.**
 
 - **`server/`** — API REST em Node.js + Express (JavaScript, ESM)
 - **`web/`** — interface em React + Vite (JavaScript), mobile-first
+- **`Dockerfile` / `docker-compose.yml`** — para subir tudo em um comando
 
 ---
 
@@ -186,6 +187,12 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
   relógio do tempo em campo e o histórico dos últimos 14 dias
 - A **localização é gravada no momento da batida** — entrada e saída — e só
   nesse momento: o CRM não acompanha ninguém ao longo do dia
+- A coordenada vira **nome de rua** ("Travessa José Severino — Mombaça"), e cada
+  batida tem link para o mapa. A conversão acontece **depois** de registrar, no
+  Nominatim (OpenStreetMap): a batida nunca espera pela internet, e se a
+  consulta falhar o registro mantém latitude e longitude
+- É a única chamada a serviço externo do sistema; `NEWPAY_GEOCODIFICAR=false`
+  desliga e guarda só a coordenada
 - Sem GPS disponível o expediente abre do mesmo jeito, marcado como "sem
   localização", porque travar o começo do dia por causa de sinal seria pior
 - Não deixa abrir dois expedientes ao mesmo tempo nem encerrar o que não
@@ -253,6 +260,16 @@ npm start
 Na primeira vez o banco nasce **vazio**, só com o gestor do `NEWPAY_ADMIN_*`
 (que precisa trocar a senha no primeiro acesso). Nada de cliente fictício: a
 base de demonstração só é gerada fora de produção.
+
+### Em container (recomendado)
+
+```bash
+docker compose up -d --build
+```
+
+Sobe API e front em um serviço só, com os dados em um volume (`newpay-dados`)
+que sobrevive a `up --build`. O passo a passo completo — migrar o banco que já
+existe, subir na VPS, backup e atualização — está em **[DEPLOY.md](DEPLOY.md)**.
 
 ### 4. Onde hospedar
 

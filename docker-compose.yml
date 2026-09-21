@@ -1,0 +1,37 @@
+# Sobe o CRM em um comando:  docker compose up -d --build
+#
+# As variáveis saem do arquivo .env da raiz (o mesmo do npm start). O segredo é
+# obrigatório: sem ele o compose nem tenta subir.
+
+services:
+  crm:
+    build: .
+    image: newpay-crm
+    container_name: newpay-crm
+    restart: unless-stopped
+
+    ports:
+      # Em produção, deixe o proxy (Caddy/nginx) na frente e publique só nele:
+      # "127.0.0.1:4000:4000" prende a porta ao próprio servidor.
+      - "${PORTA_PUBLICA:-4000}:4000"
+
+    environment:
+      NODE_ENV: production
+      NEWPAY_SECRET: ${NEWPAY_SECRET:?defina NEWPAY_SECRET no arquivo .env}
+      NEWPAY_HORAS_SESSAO: ${NEWPAY_HORAS_SESSAO:-720}
+      NEWPAY_GEOCODIFICAR: ${NEWPAY_GEOCODIFICAR:-true}
+      NEWPAY_CONTATO: ${NEWPAY_CONTATO:-crm@newpay.com.br}
+      # Usados só quando o banco ainda não existe (primeiro gestor)
+      NEWPAY_ADMIN_NOME: ${NEWPAY_ADMIN_NOME:-}
+      NEWPAY_ADMIN_EMAIL: ${NEWPAY_ADMIN_EMAIL:-}
+      NEWPAY_ADMIN_SENHA: ${NEWPAY_ADMIN_SENHA:-}
+      NEWPAY_ADMIN_CIDADE: ${NEWPAY_ADMIN_CIDADE:-}
+
+    volumes:
+      # Banco, anexos de visita e backups. É este volume que faz os dados
+      # sobreviverem a "docker compose up --build".
+      - dados:/data
+
+volumes:
+  dados:
+    name: newpay-dados

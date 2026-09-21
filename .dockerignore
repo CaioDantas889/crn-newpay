@@ -1,0 +1,19 @@
+# O que não entra na imagem
+**/node_modules
+web/dist
+
+# Dados locais: o container usa o volume montado em /data
+server/data
+
+# Ambiente e ferramentas
+.env
+.env.local
+.git
+.github
+.claude
+*.log
+npm-debug.log*
+
+# Documentação não muda o que roda
+README.md
+DEPLOY.md

@@ -10,6 +10,7 @@ import { Router } from 'express';
 import { find, id, insert, logActivity, table, update } from '../store.js';
 import { isManager, requireAuth } from '../auth.js';
 import { dateKey, endOfDay, startOfDay } from '../lib/dates.js';
+import { buscarEndereco, linkDoMapa } from '../lib/endereco.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -31,11 +32,29 @@ function lerLocal(corpo = {}) {
   };
 }
 
+const comMapa = (local) =>
+  local ? { ...local, mapa: linkDoMapa(local.lat, local.lng) } : null;
+
 const expandir = (j) => ({
   ...j,
+  inicioLocal: comMapa(j.inicioLocal),
+  fimLocal: comMapa(j.fimLocal),
   emAndamento: !j.fimAt,
   duracaoMin: j.fimAt ? j.duracaoMin : minutosEntre(j.inicioAt, new Date()),
 });
+
+/**
+ * Busca o nome da rua depois de responder. A batida não espera: o registro já
+ * está salvo com a coordenada, e o endereço entra no lugar quando chega.
+ */
+function completarEndereco(jornadaId, campo, local) {
+  if (!local) return;
+  buscarEndereco(local.lat, local.lng)
+    .then((endereco) => {
+      if (endereco) update('jornadas', jornadaId, { [campo]: endereco });
+    })
+    .catch(() => {});
+}
 
 const jornadaAberta = (userId) =>
   table('jornadas').find((j) => j.userId === userId && !j.fimAt) ?? null;
@@ -84,8 +103,10 @@ router.post('/entrada', (req, res) => {
     data: dateKey(agora),
     inicioAt: agora.toISOString(),
     inicioLocal: local,
+    inicioEndereco: null,
     fimAt: null,
     fimLocal: null,
+    fimEndereco: null,
     duracaoMin: 0,
     observacao: String(req.body?.observacao ?? '').trim(),
     createdAt: agora.toISOString(),
@@ -93,6 +114,7 @@ router.post('/entrada', (req, res) => {
 
   logActivity({ userId: req.user.id, action: 'expediente_iniciado', comLocal: Boolean(local) });
   res.status(201).json(expandir(jornada));
+  completarEndereco(jornada.id, 'inicioEndereco', local);
 });
 
 /** POST /api/jornada/saida — encerra o expediente aberto */
@@ -116,6 +138,7 @@ router.post('/saida', (req, res) => {
 
   logActivity({ userId: req.user.id, action: 'expediente_encerrado', minutos: duracaoMin });
   res.json(expandir(jornada));
+  completarEndereco(jornada.id, 'fimEndereco', jornada.fimLocal);
 });
 
 /** GET /api/jornada/equipe?data=YYYY-MM-DD — quem já começou o dia (gestor) */
@@ -140,7 +163,8 @@ router.get('/equipe', (req, res) => {
         emAndamento: Boolean(aberta),
         inicioAt: doDia[0]?.inicioAt ?? null,
         fimAt: doDia.find((j) => j.fimAt)?.fimAt ?? null,
-        inicioLocal: doDia[0]?.inicioLocal ?? null,
+        inicioLocal: comMapa(doDia[0]?.inicioLocal ?? null),
+        inicioEndereco: doDia[0]?.inicioEndereco ?? null,
         minutos: doDia.reduce((s, j) => s + (j.fimAt ? j.duracaoMin : minutosEntre(j.inicioAt, new Date())), 0),
       };
     })
