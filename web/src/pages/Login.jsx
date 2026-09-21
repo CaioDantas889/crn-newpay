@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 
 const CONTAS = [
@@ -9,9 +10,24 @@ const CONTAS = [
 
 export default function Login() {
   const { entrar, toast } = useApp();
-  const [email, setEmail] = useState('carlos@newpay.com.br');
-  const [senha, setSenha] = useState('newpay123');
+  const [demo, setDemo] = useState(false);
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
   const [entrando, setEntrando] = useState(false);
+
+  // As contas de teste só existem no banco de demonstração; em produção a tela
+  // não anuncia senha nenhuma.
+  useEffect(() => {
+    endpoints
+      .meta()
+      .then((m) => {
+        if (!m.demo) return;
+        setDemo(true);
+        setEmail('carlos@newpay.com.br');
+        setSenha('newpay123');
+      })
+      .catch(() => setDemo(false));
+  }, []);
 
   const enviar = async (e) => {
     e.preventDefault();
@@ -44,7 +60,7 @@ export default function Login() {
         <ul>
           <li><span>📅</span><span><b>Visão mensal e diária</b> com cores por tipo de compromisso.</span></li>
           <li><span>🔔</span><span><b>Notificações automáticas</b> de reunião, visita, follow-up vencido e meta.</span></li>
-          <li><span>🎯</span><span><b>Agenda inteligente</b> sugerindo quem visitar e montando a rota.</span></li>
+          <li><span>📚</span><span><b>Biblioteca comercial</b> com vídeos, áudios e PDFs para mandar ao cliente.</span></li>
           <li><span>🏢</span><span><b>Agenda corporativa</b> com confirmação de presença obrigatória.</span></li>
           <li><span>📢</span><span><b>Mural de avisos</b> com controle de quem leu cada comunicado.</span></li>
           <li><span>📊</span><span><b>Painel do gestor</b> com a execução da equipe em tempo real.</span></li>
@@ -84,6 +100,7 @@ export default function Login() {
             </button>
           </div>
 
+          {demo && (
           <div className="login-contas">
             <span className="selo">Contas de demonstração</span>
             {CONTAS.map((c) => (
@@ -107,6 +124,7 @@ export default function Login() {
             ))}
             <p className="mini">Senha de todas as contas: <b>newpay123</b></p>
           </div>
+          )}
         </form>
       </div>
     </div>

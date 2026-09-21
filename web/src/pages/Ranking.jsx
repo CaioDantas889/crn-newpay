@@ -19,7 +19,7 @@ export default function Ranking() {
       <div>
         <h1>Ranking do mês</h1>
         <p className="mini">
-          {equipe.maquinasAtivadas} máquinas ativadas pela equipe · {moeda(equipe.tpvRealizado)} de TPV
+          {equipe.maquinasAtivadas} máquinas ativadas pela equipe · {equipe.maquinasVendidas} vendidas
         </p>
       </div>
 
@@ -64,7 +64,7 @@ export default function Ranking() {
               <Avatar nome={l.vendedor.name} cor="rgba(255,255,255,0.25)" />
               <span className="nome">{l.vendedor.name.split(' ')[0]}</span>
               <b>{l.maquinasAtivadas}</b>
-              <span className="mini">máquinas · {moeda(l.comissao)}</span>
+              <span className="mini">máquinas ativadas</span>
               <span className="mini">{l.posicao === 1 ? '🥇' : l.posicao === 2 ? '🥈' : '🥉'}</span>
             </div>
           ))}
@@ -92,7 +92,7 @@ export default function Ranking() {
             </div>
             <div style={{ textAlign: 'right' }}>
               <b>{l.maquinasAtivadas}</b>
-              <div className="mini">{moeda(l.comissao)}</div>
+              <div className="mini">ativadas</div>
             </div>
             <span className="chip-nivel" style={{ background: l.nivel.cor }}>{l.nivel.emoji}</span>
           </div>
@@ -135,8 +135,6 @@ export default function Ranking() {
                 <th className="num">Visitas</th>
                 <th className="num">Vendidas</th>
                 <th className="num">Ativadas</th>
-                <th className="num">TPV</th>
-                <th className="num">Comissão</th>
                 <th className="num">Meta</th>
               </tr>
             </thead>
@@ -152,8 +150,6 @@ export default function Ranking() {
                   <td className="num">{l.visitas}</td>
                   <td className="num">{l.maquinasVendidas}</td>
                   <td className="num">{l.maquinasAtivadas}</td>
-                  <td className="num">{moeda(l.tpvRealizado)}</td>
-                  <td className="num">{moeda(l.comissao)}</td>
                   <td className="num" style={{ color: l.percentualMeta >= 100 ? 'var(--green)' : 'var(--text)' }}>
                     {l.percentualMeta}%
                   </td>

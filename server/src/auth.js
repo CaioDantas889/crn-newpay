@@ -1,15 +1,35 @@
 // Autenticacao: hash scrypt + token HMAC assinado (sem dependencias externas).
+// O segredo vem de config.js — em producao o servidor nem sobe sem ele.
 
 import crypto from 'node:crypto';
 import { table } from './store.js';
+import { config, TAMANHO_MINIMO_SENHA } from './config.js';
 
-const SECRET = process.env.NEWPAY_SECRET || 'newpay-dev-secret-troque-em-producao';
-const TTL_HOURS = 12;
+const SECRET = config.segredo;
+const TTL_HOURS = config.horasSessao;
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(password, salt, 32).toString('hex');
   return `${salt}:${hash}`;
+}
+
+/** Senha provisoria legivel para entregar ao vendedor no primeiro acesso */
+export function gerarSenhaProvisoria() {
+  const alfabeto = 'abcdefghijkmnopqrstuvwxyz23456789';
+  const sorteio = crypto.randomBytes(8);
+  const corpo = [...sorteio].map((b) => alfabeto[b % alfabeto.length]).join('');
+  return `newpay-${corpo}`;
+}
+
+/** Devolve o motivo da recusa, ou null quando a senha serve */
+export function validarSenha(senha = '') {
+  const valor = String(senha);
+  if (valor.trim().length < TAMANHO_MINIMO_SENHA) {
+    return `A senha precisa de ao menos ${TAMANHO_MINIMO_SENHA} caracteres.`;
+  }
+  if (/^\d+$/.test(valor.trim())) return 'Evite senha só com números.';
+  return null;
 }
 
 export function verifyPassword(password, stored = '') {
@@ -23,10 +43,14 @@ export function verifyPassword(password, stored = '') {
 const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
 const sign = (body) => crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
 
+/** Versão da senha: muda a cada troca/reset e derruba os tokens antigos */
+export const senhaVersao = (user) => Number(user?.passwordVersion) || 0;
+
 export function createToken(user) {
   const body = b64({
     sub: user.id,
     role: user.role,
+    pv: senhaVersao(user),
     exp: Date.now() + TTL_HOURS * 3600_000,
   });
   return `${body}.${sign(body)}`;
@@ -49,7 +73,9 @@ export function readToken(token = '') {
 
 export const publicUser = (user) => {
   if (!user) return null;
-  const { password, ...rest } = user;
+  // Nem o hash nem o contador de trocas saem da API: a interface nao usa nenhum
+  // dos dois.
+  const { password, passwordVersion, ...rest } = user;
   return rest;
 };
 
@@ -61,6 +87,12 @@ export function requireAuth(req, res, next) {
 
   const user = table('users').find((u) => u.id === payload.sub);
   if (!user || user.active === false) return res.status(401).json({ error: 'Usuario invalido.' });
+
+  // Sessao aberta antes da ultima troca de senha nao vale mais: e assim que um
+  // celular perdido perde o acesso sem precisar esperar a sessao vencer.
+  if ((Number(payload.pv) || 0) !== senhaVersao(user)) {
+    return res.status(401).json({ error: 'Sua senha mudou. Entre novamente.' });
+  }
 
   req.user = user;
   next();

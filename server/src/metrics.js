@@ -3,7 +3,7 @@
 
 import { table } from './store.js';
 import {
-  FUNIL, calcularComissao, nivelPorAtivacoes, proximoNivel,
+  FUNIL, nivelPorAtivacoes, proximoNivel,
 } from './domain.js';
 import { dateKey, endOfDay, startOfDay } from './lib/dates.js';
 
@@ -32,7 +32,7 @@ export const metaDoMes = (userId, mes) =>
 
 /**
  * Consolidado de um vendedor em um período.
- * Reúne o funil inteiro: visitas, propostas, vendas, ativações, TPV e comissão.
+ * Reúne o funil inteiro: visitas, propostas, vendas e ativações.
  */
 export function resumoVendedor(userId, de, ate, mes) {
   const visitas = table('visits').filter((v) => v.userId === userId && dentro(v.at, de, ate));
@@ -44,8 +44,6 @@ export function resumoVendedor(userId, de, ate, mes) {
 
   const maquinasVendidas = vendas.reduce((s, d) => s + d.maquinas, 0);
   const maquinasAtivadas = ativacoes.reduce((s, d) => s + d.maquinas, 0);
-  const tpvPrevisto = vendas.reduce((s, d) => s + d.tpvPrevisto, 0);
-  const tpvRealizado = ativacoes.reduce((s, d) => s + (d.tpvRealizado || 0), 0);
 
   const novosLeads = table('clients').filter(
     (c) => c.ownerId === userId && dentro(c.createdAt, de, ate)
@@ -53,7 +51,6 @@ export function resumoVendedor(userId, de, ate, mes) {
 
   const meta = metaDoMes(userId, mes ?? dateKey(de).slice(0, 7));
   const metaBatida = meta.metaMaquinas > 0 && maquinasAtivadas >= meta.metaMaquinas;
-  const comissao = calcularComissao({ maquinasAtivadas, tpv: tpvRealizado, metaBatida });
 
   const visitasProdutivas = visitas.filter(
     (v) => v.resultado === 'interessado' || v.resultado === 'fechado'
@@ -73,9 +70,6 @@ export function resumoVendedor(userId, de, ate, mes) {
     vendas: vendas.length,
     maquinasVendidas,
     maquinasAtivadas,
-    tpvPrevisto,
-    tpvRealizado,
-    comissao,
     meta,
     metaBatida,
     percentualMeta: meta.metaMaquinas ? Math.round((maquinasAtivadas / meta.metaMaquinas) * 100) : 0,
@@ -83,7 +77,6 @@ export function resumoVendedor(userId, de, ate, mes) {
     conversaoVisitaVenda: visitas.length ? Math.round((vendas.length / visitas.length) * 100) : 0,
     conversaoPropostaVenda: propostas.length ? Math.round((propostasFechadas / propostas.length) * 100) : 0,
     ticketMedioMaquinas: vendas.length ? Number((maquinasVendidas / vendas.length).toFixed(1)) : 0,
-    ticketMedioTPV: vendas.length ? Math.round(tpvPrevisto / vendas.length) : 0,
     nivel: nivelPorAtivacoes(maquinasAtivadas),
     proximoNivel: proximoNivel(maquinasAtivadas),
   };
@@ -98,7 +91,6 @@ export function funilDoVendedor(userId) {
       chave,
       ...info,
       total: doEstagio.length,
-      tpvPotencial: doEstagio.reduce((s, c) => s + (c.tpvEstimado || 0), 0),
     };
   });
 }
@@ -116,7 +108,7 @@ export function rankingDoMes(mes) {
     .sort(
       (a, b) =>
         b.maquinasAtivadas - a.maquinasAtivadas ||
-        b.tpvRealizado - a.tpvRealizado ||
+        b.maquinasVendidas - a.maquinasVendidas ||
         b.visitas - a.visitas
     )
     .map((linha, i) => ({ ...linha, posicao: i + 1 }));
@@ -163,6 +155,5 @@ export function kpiCalculado(userId, base = new Date()) {
     novosLeads: table('clients').filter((c) => c.ownerId === userId && dentro(c.createdAt, ini, fim)).length,
     propostas: table('deals').filter((d) => d.userId === userId && dentro(d.propostaAt, ini, fim)).length,
     maquinas: vendas.reduce((s, d) => s + d.maquinas, 0),
-    tpvPrevisto: vendas.reduce((s, d) => s + d.tpvPrevisto, 0),
   };
 }

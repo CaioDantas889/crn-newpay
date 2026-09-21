@@ -68,7 +68,6 @@ export default function MapaClientes() {
         </div>
         <div className="linha" style={{ flexWrap: 'wrap' }}>
           <button className="btn btn-brand" onClick={usarMinhaLocalizacao}>📍 Usar minha localização</button>
-          <button className="btn" onClick={() => navigate('/rota')}>🎯 Montar rota do dia</button>
         </div>
       </div>
 
@@ -123,7 +122,7 @@ export default function MapaClientes() {
             <b>{selecionado.company}</b>
             <p className="mini">
               {selecionado.name} · {selecionado.city} · {selecionado.distanciaKm} km ·{' '}
-              {moeda(selecionado.tpvEstimado)} de TPV
+              {selecionado.segmentoLabel ?? selecionado.segment}
             </p>
           </div>
           <button className="btn btn-sm" onClick={() => navigate(`/carteira/${selecionado.id}`)}>Abrir</button>

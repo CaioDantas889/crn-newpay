@@ -1,7 +1,7 @@
 // "Visitei" em dois toques: resultado, foto, áudio e o CRM faz o resto
 // (move o funil, registra o contato, agenda o retorno e abre a venda).
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
@@ -38,6 +38,40 @@ const lerArquivo = (file) =>
     leitor.readAsDataURL(file);
   });
 
+/**
+ * Por que o microfone pode não estar disponível. A causa mais comum no dia a
+ * dia não é bug: é permissão negada — e ela vale por endereço, então liberar em
+ * localhost:5173 não vale para localhost:4000 nem para o domínio publicado.
+ */
+const MOTIVOS_MICROFONE = {
+  NotAllowedError:
+    'Microfone bloqueado para este endereço. Clique no cadeado ao lado da barra de endereço, libere o microfone e tente de novo.',
+  PermissionDeniedError:
+    'Microfone bloqueado para este endereço. Libere no cadeado da barra de endereço e tente de novo.',
+  NotFoundError: 'Nenhum microfone encontrado neste aparelho.',
+  NotReadableError: 'O microfone está sendo usado por outro programa. Feche o outro app e tente de novo.',
+  SecurityError: 'O navegador bloqueou o microfone neste endereço.',
+  AbortError: 'A gravação foi interrompida pelo navegador. Tente de novo.',
+};
+
+/** Códigos do navegador para falha de GPS (1 negado, 2 indisponível, 3 demorou) */
+const MOTIVOS_LOCALIZACAO = {
+  1: 'Localização bloqueada para este endereço. Libere no cadeado da barra de endereço.',
+  2: 'O aparelho não conseguiu achar a posição. Saia de perto de paredes e tente de novo.',
+  3: 'O GPS demorou demais para responder. Tente de novo.',
+};
+
+/** Impedimento do próprio ambiente (endereço sem HTTPS, navegador sem suporte) */
+function verificarSuporteAudio() {
+  if (typeof window === 'undefined') return null;
+  if (!window.isSecureContext) {
+    return `O microfone só funciona em HTTPS ou localhost — este endereço é ${window.location.origin}.`;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) return 'Este navegador não dá acesso ao microfone.';
+  if (typeof MediaRecorder === 'undefined') return 'Este navegador não grava áudio.';
+  return null;
+}
+
 export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFechar, onRegistrado }) {
   const { meta, toast, recarregarNotificacoes } = useApp();
   const navigate = useNavigate();
@@ -53,10 +87,13 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const [retornarEmDias, setRetornarEmDias] = useState(3);
   const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: 1.89 });
   const [local, setLocal] = useState(null);
+  const [localErro, setLocalErro] = useState(null);
+  const [buscandoLocal, setBuscandoLocal] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const gravadorRef = useRef(null);
   const pedacosRef = useRef([]);
+  const impedimentoAudio = verificarSuporteAudio();
 
   // Busca de cliente só quando a visita não veio de um cliente específico
   useEffect(() => {
@@ -67,15 +104,32 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
     return () => clearTimeout(t);
   }, [busca, clienteInicial]);
 
-  // GPS do momento da visita (silencioso quando negado)
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  // GPS do momento da visita. Quando falha, a visita ainda é registrada — mas
+  // com a coordenada cadastrada do cliente, então o vendedor precisa saber.
+  const pegarLocalizacao = useCallback(() => {
+    if (!window.isSecureContext) {
+      return setLocalErro(`Localização só funciona em HTTPS ou localhost (aqui é ${window.location.origin}).`);
+    }
+    if (!navigator.geolocation) return setLocalErro('Este aparelho não informa a localização.');
+
+    setLocalErro(null);
+    setBuscandoLocal(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => setLocal({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { timeout: 6000 }
+      (pos) => {
+        setLocal({ lat: pos.coords.latitude, lng: pos.coords.longitude, precisao: Math.round(pos.coords.accuracy) });
+        setBuscandoLocal(false);
+      },
+      (erro) => {
+        setBuscandoLocal(false);
+        setLocalErro(MOTIVOS_LOCALIZACAO[erro.code] ?? 'Não consegui pegar a localização.');
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30_000 }
     );
   }, []);
+
+  useEffect(() => {
+    pegarLocalizacao();
+  }, [pegarLocalizacao]);
 
   const adicionarFotos = async (e) => {
     const arquivos = [...e.target.files].slice(0, 4 - fotos.length);
@@ -95,6 +149,11 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       gravadorRef.current?.stop();
       return;
     }
+
+    // Antes de pedir o microfone, diz o que impede — em vez de falhar no clique
+    // com uma mensagem genérica.
+    if (impedimentoAudio) return toast(impedimentoAudio, 'erro');
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const gravador = new MediaRecorder(stream);
@@ -109,8 +168,10 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       gravadorRef.current = gravador;
       gravador.start();
       setGravando(true);
-    } catch {
-      toast('Não foi possível acessar o microfone. Anexe um arquivo de áudio.', 'erro');
+    } catch (erro) {
+      console.warn('[audio] microfone recusado:', erro);
+      setGravando(false);
+      toast(MOTIVOS_MICROFONE[erro?.name] ?? `Não consegui acessar o microfone (${erro?.name ?? 'erro'}). Anexe um arquivo de áudio.`, 'erro');
     }
   };
 
@@ -244,8 +305,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                 </div>
               </div>
               <p className="mini">
-                TPV previsto: {moeda((cliente.tpvEstimado || 0) * venda.maquinas)} — entra na sua meta quando a
-                máquina for ativada.
+                Entra na sua meta do mês quando a máquina for ativada.
               </p>
             </div>
           )}
@@ -310,20 +370,49 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                 <button className="btn btn-ghost btn-sm" onClick={() => setAudio(null)}>Remover</button>
               </div>
             ) : (
-              <div className="gravador">
-                <button className={`btn ${gravando ? 'btn-danger' : ''}`} onClick={gravarAudio}>
-                  {gravando ? '⏹ Parar gravação' : '🎙️ Gravar áudio'}
-                </button>
-                {gravando && (
-                  <span className="linha mini">
-                    <span className="bolinha" /> gravando...
-                  </span>
-                )}
-              </div>
+              <>
+                <div className="gravador">
+                  <button
+                    className={`btn ${gravando ? 'btn-danger' : ''}`}
+                    onClick={gravarAudio}
+                    disabled={Boolean(impedimentoAudio)}
+                    title={impedimentoAudio ?? undefined}
+                  >
+                    {gravando ? '⏹ Parar gravação' : '🎙️ Gravar áudio'}
+                  </button>
+                  {gravando && (
+                    <span className="linha mini">
+                      <span className="bolinha" /> gravando...
+                    </span>
+                  )}
+                </div>
+                {impedimentoAudio && <p className="mini">{impedimentoAudio} Você ainda pode anexar um arquivo de áudio.</p>}
+              </>
             )}
           </div>
 
-          {local && <p className="mini">📍 Localização capturada no momento da visita.</p>}
+          <div className="campo">
+            {buscandoLocal && <p className="mini">📍 Procurando sua localização...</p>}
+
+            {local && !buscandoLocal && (
+              <p className="mini">
+                📍 Localização capturada no momento da visita
+                {local.precisao ? ` (precisão de ~${local.precisao} m)` : ''}.
+              </p>
+            )}
+
+            {!local && !buscandoLocal && (
+              <div className="linha">
+                <span className="mini crescer">
+                  📍 {localErro ?? 'Sem localização do aparelho.'} A visita vai usar o endereço
+                  cadastrado do cliente.
+                </span>
+                <button type="button" className="btn btn-sm" onClick={pegarLocalizacao}>
+                  Tentar de novo
+                </button>
+              </div>
+            )}
+          </div>
         </>
       )}
     </Modal>

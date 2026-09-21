@@ -1,4 +1,4 @@
-// Ranking gamificado da equipe: máquinas, ativações, TPV e comissão.
+// Ranking gamificado da equipe: máquinas vendidas, ativações e conversão.
 
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
@@ -20,8 +20,6 @@ router.get('/', (req, res) => {
       vendedor: l.vendedor,
       maquinasVendidas: l.maquinasVendidas,
       maquinasAtivadas: l.maquinasAtivadas,
-      tpvRealizado: l.tpvRealizado,
-      comissao: l.comissao.total,
       visitas: l.visitas,
       conversao: l.conversaoVisitaVenda,
       percentualMeta: l.percentualMeta,
@@ -30,8 +28,7 @@ router.get('/', (req, res) => {
     })),
     equipe: {
       maquinasAtivadas: linhas.reduce((s, l) => s + l.maquinasAtivadas, 0),
-      tpvRealizado: linhas.reduce((s, l) => s + l.tpvRealizado, 0),
-      comissao: linhas.reduce((s, l) => s + l.comissao.total, 0),
+      maquinasVendidas: linhas.reduce((s, l) => s + l.maquinasVendidas, 0),
     },
     minhaPosicao: minha
       ? {

@@ -37,13 +37,11 @@ router.post('/', (req, res) => {
     clientId: cliente.id,
     userId: req.user.id,
     maquinas,
-    tpvPrevisto: Number(b.tpvPrevisto) || (cliente.tpvEstimado || 0) * maquinas,
     taxaOfertada: Number(b.taxaOfertada) || null,
     status,
     propostaAt: agora,
     fechamentoAt: status === 'fechado' || status === 'ativado' ? agora : null,
     ativacaoAt: status === 'ativado' ? agora : null,
-    tpvRealizado: 0,
     notes: b.notes ?? '',
     createdAt: agora,
   });
@@ -65,7 +63,7 @@ router.patch('/:id', (req, res) => {
   }
 
   const patch = {};
-  for (const campo of ['maquinas', 'tpvPrevisto', 'tpvRealizado', 'taxaOfertada', 'notes']) {
+  for (const campo of ['maquinas', 'taxaOfertada', 'notes']) {
     if (campo in req.body) patch[campo] = req.body[campo];
   }
 
@@ -77,8 +75,6 @@ router.patch('/:id', (req, res) => {
     if (req.body.status === 'ativado') {
       patch.ativacaoAt = agora;
       if (!negocio.fechamentoAt) patch.fechamentoAt = agora;
-      // Sem TPV realizado informado, assume o previsto como ponto de partida
-      if (!negocio.tpvRealizado && !('tpvRealizado' in req.body)) patch.tpvRealizado = negocio.tpvPrevisto;
     }
 
     const cliente = find('clients', negocio.clientId);

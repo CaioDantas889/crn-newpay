@@ -58,7 +58,7 @@ export default function ClienteDetalhe() {
 
   const avancarNegocio = async (negocio, status) => {
     await endpoints.atualizarNegocio(negocio.id, { status });
-    toast(status === 'ativado' ? 'Máquina ativada! Entra na sua meta e comissão.' : 'Negócio atualizado.');
+    toast(status === 'ativado' ? 'Máquina ativada! Entra na sua meta do mês.' : 'Negócio atualizado.');
     recarregar();
   };
 
@@ -96,8 +96,7 @@ export default function ClienteDetalhe() {
           </div>
           <Progresso atual={cliente.score} total={100} cor={CORES_TEMPERATURA[cliente.temperature]} />
           <p className="mini" style={{ marginTop: 6 }}>
-            {moeda(cliente.tpvEstimado)} de TPV estimado ·{' '}
-            {cliente.diasSemContato === 0 ? 'contato hoje' : `${cliente.diasSemContato} dias sem contato`}
+            {cliente.diasSemContato === 0 ? 'Contato hoje' : `${cliente.diasSemContato} dias sem contato`}
             {cliente.machines > 0 ? ` · ${cliente.machines} máquina(s) NewPay` : ''}
           </p>
         </div>
@@ -230,7 +229,7 @@ export default function ClienteDetalhe() {
               {n.maquinas}x
             </span>
             <div className="info">
-              <b>{moeda(n.tpvPrevisto)} de TPV previsto</b>
+              <b>{n.maquinas} máquina(s){n.taxaOfertada ? ` · taxa ${n.taxaOfertada}%` : ''}</b>
               <div className="mini">
                 {n.taxaOfertada ? `Taxa ${n.taxaOfertada}% · ` : ''}
                 proposta em {diaMes(n.propostaAt)}
@@ -273,7 +272,7 @@ export default function ClienteDetalhe() {
             </div>
           </div>
           <button className="btn btn-primary btn-block" onClick={enviarProposta}>
-            📄 Registrar proposta ({moeda(cliente.tpvEstimado * proposta.maquinas)} de TPV)
+            📄 Registrar proposta ({proposta.maquinas} máquina(s))
           </button>
         </div>
       </div>
@@ -415,10 +414,10 @@ export default function ClienteDetalhe() {
       {excluir?.tipo === 'negocio' && (
         <ConfirmarExclusao
           titulo="Excluir negócio"
-          alvo={`${excluir.dado.maquinas} máquina(s) · ${moeda(excluir.dado.tpvPrevisto)} de TPV`}
+          alvo={`${excluir.dado.maquinas} máquina(s)${excluir.dado.taxaOfertada ? ` · taxa ${excluir.dado.taxaOfertada}%` : ''}`}
           descricao={
             excluir.dado.status === 'ativado'
-              ? 'Atenção: esta venda está ativada e conta na sua meta e comissão do mês.'
+              ? 'Atenção: esta venda está ativada e conta na sua meta do mês.'
               : 'A proposta sai do funil e dos indicadores.'
           }
           textoBotao="Excluir negócio"

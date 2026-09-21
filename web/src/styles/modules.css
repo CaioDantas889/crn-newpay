@@ -272,3 +272,29 @@
 @media (min-width: 960px) {
   .layout-dia { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 }
+
+/* ===================================================== CADASTRO DA EQUIPE == */
+/* Quem perdeu o acesso continua na lista, mas sem chamar atenção */
+.card.esmaecido { opacity: 0.62; }
+.card.esmaecido:hover { opacity: 1; }
+
+/* A senha provisória é lida em voz alta para o vendedor: precisa ser grande */
+.senha-provisoria {
+  display: block; padding: 10px 12px;
+  background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text);
+  user-select: all; word-break: break-all;
+}
+
+/* ================================================= CONVITE DE INSTALAÇÃO == */
+.instalar-app { display: flex; flex-direction: column; gap: 10px; }
+.instalar-app .emoji { font-size: 1.5rem; }
+.instalar-app p { margin-top: 2px; }
+
+.passos-instalacao {
+  margin: 0; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 0.78rem; color: var(--text-2);
+}
+.passos-instalacao b { color: var(--text); }

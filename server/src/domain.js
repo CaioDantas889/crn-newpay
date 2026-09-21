@@ -1,5 +1,5 @@
 // Vocabulário e regras de negócio do CRM NewPay Vendas Externas.
-// Tudo que é "regra da operação" (pontuação, funil, comissão, níveis) mora
+// Tudo que é "regra da operação" (pontuação, funil, níveis) mora
 // aqui, para a API e a interface falarem a mesma língua.
 
 /* ------------------------------------------------------------ calendário */
@@ -145,14 +145,6 @@ export const TEMPERATURES = {
 export const temperaturaPorScore = (score = 0) =>
   score >= 61 ? 'quente' : score >= 31 ? 'morno' : 'frio';
 
-/** TPV mensal estimado = faturamento médio da faixa × fator do volume de cartão */
-export function estimarTPV(diagnostico = {}) {
-  const faixa = FATURAMENTOS[diagnostico.faturamento];
-  const volume = VOLUMES_CARTAO[diagnostico.volumeCartao];
-  if (!faixa || !volume) return 0;
-  return Math.round(((faixa.min + faixa.max) / 2) * volume.fator);
-}
-
 /* ------------------------------------------------------------------ funil */
 
 export const FUNIL = {
@@ -175,20 +167,9 @@ export const RESULTADOS_VISITA = {
   retornar:        { label: 'Retornar depois',  stage: 'contatado',  cor: '#eab308', emoji: '🔁' },
 };
 
-/* ---------------------------------------------------- comissão e ranking */
-
-export const COMISSAO = {
-  porMaquinaAtivada: 200,   // R$ por máquina ativada
-  percentualTPV: 0.0015,    // 0,15% do TPV transacionado
-  bonusMetaBatida: 500,     // pago quando a meta do mês é atingida
-};
-
-export function calcularComissao({ maquinasAtivadas = 0, tpv = 0, metaBatida = false }) {
-  const porMaquina = maquinasAtivadas * COMISSAO.porMaquinaAtivada;
-  const porTPV = Math.round(tpv * COMISSAO.percentualTPV);
-  const bonus = metaBatida ? COMISSAO.bonusMetaBatida : 0;
-  return { porMaquina, porTPV, bonus, total: porMaquina + porTPV + bonus };
-}
+/* ------------------------------------------------ níveis do ranking ---- */
+// A NewPay paga salário fixo ao vendedor externo: não existe cálculo de
+// comissão aqui. O ranking é reconhecimento, medido em máquinas ativadas.
 
 export const NIVEIS = [
   { chave: 'bronze',   label: 'Bronze',       emoji: '🥉', min: 0,  cor: '#b45309' },
@@ -210,7 +191,6 @@ export const KPIS_DIARIOS = [
   { chave: 'novosLeads',  label: 'Novos leads cadastrados', emoji: '🆕', unidade: 'leads' },
   { chave: 'propostas',   label: 'Propostas enviadas',      emoji: '📄', unidade: 'propostas' },
   { chave: 'maquinas',    label: 'Máquinas vendidas',       emoji: '💳', unidade: 'máquinas' },
-  { chave: 'tpvPrevisto', label: 'TPV previsto',            emoji: '💰', unidade: 'R$', moeda: true },
 ];
 
 /* ------------------------------------------------------------ utilidades */

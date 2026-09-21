@@ -1,6 +1,14 @@
 import { Router } from 'express';
-import { table } from '../store.js';
-import { createToken, publicUser, requireAuth, verifyPassword } from '../auth.js';
+import { logActivity, table, update } from '../store.js';
+import {
+  createToken,
+  hashPassword,
+  publicUser,
+  requireAuth,
+  senhaVersao,
+  validarSenha,
+  verifyPassword,
+} from '../auth.js';
 
 const router = Router();
 
@@ -22,6 +30,33 @@ router.post('/login', (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
+});
+
+/**
+ * POST /api/auth/senha — troca da própria senha.
+ * É o caminho do primeiro acesso: quem entra com senha provisória cai aqui
+ * antes de usar o CRM (mustChangePassword).
+ */
+router.post('/senha', requireAuth, (req, res) => {
+  const { atual = '', nova = '' } = req.body ?? {};
+
+  if (!verifyPassword(atual, req.user.password)) {
+    return res.status(400).json({ error: 'Senha atual incorreta.' });
+  }
+  const recusa = validarSenha(nova);
+  if (recusa) return res.status(400).json({ error: recusa });
+  if (atual === nova) return res.status(400).json({ error: 'A nova senha precisa ser diferente da atual.' });
+
+  const atualizado = update('users', req.user.id, {
+    password: hashPassword(nova),
+    mustChangePassword: false,
+    passwordVersion: senhaVersao(req.user) + 1,
+  });
+
+  logActivity({ userId: req.user.id, action: 'senha_alterada' });
+  // A troca derruba as sessoes antigas — inclusive esta, entao vai um token novo
+  // para quem acabou de trocar continuar de onde estava.
+  res.json({ user: publicUser(atualizado), token: createToken(atualizado) });
 });
 
 /** Lista enxuta usada nos seletores de público-alvo e no painel do gestor */

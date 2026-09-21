@@ -6,12 +6,18 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
+    "start": "node --env-file-if-exists=../.env --env-file-if-exists=.env src/index.js",
     "seed": "node src/seed.js --force",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "seed:vazio": "node --env-file-if-exists=../.env --env-file-if-exists=.env src/seed.js --vazio",
+    "importar:clientes": "node --env-file-if-exists=../.env --env-file-if-exists=.env scripts/importar-clientes.mjs",
+    "limpar:demo": "node --env-file-if-exists=../.env --env-file-if-exists=.env scripts/limpar-demo.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

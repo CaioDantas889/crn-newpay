@@ -12,7 +12,6 @@ import MapaClientes from '../components/MapaClientes.jsx';
 const ORDENS = [
   { chave: 'score', label: 'Oportunidade' },
   { chave: 'contato', label: 'Sem contato' },
-  { chave: 'tpv', label: 'TPV' },
   { chave: 'nome', label: 'A–Z' },
 ];
 
@@ -133,7 +132,7 @@ export default function Carteira() {
                   <div className="info">
                     <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                     <span className="mini">
-                      {c.segmentoLabel} · {c.city} · {moeda(c.tpvEstimado)} de TPV
+                      {c.segmentoLabel} · {c.city}
                     </span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -164,7 +163,7 @@ export default function Carteira() {
                     <div className="card-header">
                       <div className="crescer">
                         <h3>{etapa.label}</h3>
-                        <p className="mini">{etapa.total} clientes · {moeda(etapa.tpvPotencial)}</p>
+                        <p className="mini">{etapa.total} cliente(s)</p>
                       </div>
                     </div>
                     {etapa.clientes.length === 0 ? (

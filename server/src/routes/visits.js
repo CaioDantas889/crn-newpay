@@ -42,7 +42,7 @@ router.get('/', (req, res) => {
 /**
  * POST /api/visits
  * body: { clientId, resultado, notes, fotos[], audio, lat, lng, eventId,
- *         retornarEmDias, venda: { maquinas, tpvPrevisto, taxaOfertada } }
+ *         retornarEmDias, venda: { maquinas, taxaOfertada } }
  */
 router.post('/', (req, res) => {
   const b = req.body ?? {};
@@ -108,7 +108,7 @@ router.post('/', (req, res) => {
     });
   }
 
-  // Visita que fechou já abre o negócio (máquinas + TPV previsto)
+  // Visita que fechou já abre o negócio
   let negocio = null;
   if (b.resultado === 'fechado') {
     const maquinas = Number(b.venda?.maquinas) || 1;
@@ -117,13 +117,11 @@ router.post('/', (req, res) => {
       clientId: cliente.id,
       userId: req.user.id,
       maquinas,
-      tpvPrevisto: Number(b.venda?.tpvPrevisto) || (cliente.tpvEstimado || 0) * maquinas,
       taxaOfertada: Number(b.venda?.taxaOfertada) || null,
       status: 'fechado',
       propostaAt: agora.toISOString(),
       fechamentoAt: agora.toISOString(),
       ativacaoAt: null,
-      tpvRealizado: 0,
       notes: b.notes ?? '',
       createdAt: agora.toISOString(),
     });

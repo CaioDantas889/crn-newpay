@@ -163,9 +163,8 @@ export default function PainelGestor() {
 
             <div className="grid grid-4">
               <Stat rotulo="Ativações" valor={t.maquinasAtivadas} cor="var(--brand-strong)" extra="Máquinas rodando" />
-              <Stat rotulo="TPV realizado" valor={moeda(t.tpvRealizado)} extra={`${moeda(t.tpvPrevisto)} previsto`} />
               <Stat rotulo="Taxa de conversão" valor={`${t.taxaConversao}%`} cor="var(--orange)" extra="Visita → venda" />
-              <Stat rotulo="Custo por venda" valor={moeda(t.custoPorVenda)} extra={`${moeda(t.comissaoTotal)} de comissão`} />
+              <Stat rotulo="Ticket médio" valor={t.ticketMedioMaquinas} extra="Máquinas por venda" />
             </div>
 
             <div className="card">
@@ -184,8 +183,6 @@ export default function PainelGestor() {
                       <th className="num">Ativações</th>
                       <th className="num">Conversão</th>
                       <th className="num">Ticket</th>
-                      <th className="num">TPV</th>
-                      <th className="num">Comissão</th>
                       <th className="num">Meta</th>
                       <th className="num">KPI</th>
                     </tr>
@@ -207,8 +204,6 @@ export default function PainelGestor() {
                           {v.conversaoVisitaVenda}%
                         </td>
                         <td className="num">{v.ticketMedioMaquinas}</td>
-                        <td className="num">{moeda(v.tpvRealizado)}</td>
-                        <td className="num">{moeda(v.comissaoTotal)}</td>
                         <td className="num" style={{ color: v.percentualMeta >= 100 ? 'var(--green)' : 'var(--text)' }}>
                           {v.percentualMeta}%
                         </td>
@@ -230,7 +225,7 @@ export default function PainelGestor() {
                     <span className="avatar" style={{ background: 'var(--navy-700)' }}>{c.maquinas}</span>
                     <div className="info">
                       <b>{c.chave}</b>
-                      <div className="mini">{c.vendas} vendas · {moeda(c.tpv)} de TPV</div>
+                      <div className="mini">{c.vendas} venda(s) · {c.maquinas} máquina(s)</div>
                     </div>
                   </div>
                 ))}
@@ -243,7 +238,7 @@ export default function PainelGestor() {
                     <span className="avatar" style={{ background: 'var(--purple)' }}>{c.maquinas}</span>
                     <div className="info">
                       <b>{c.chave}</b>
-                      <div className="mini">{c.vendas} vendas · {moeda(c.tpv)} de TPV</div>
+                      <div className="mini">{c.vendas} venda(s) · {c.maquinas} máquina(s)</div>
                     </div>
                   </div>
                 ))}

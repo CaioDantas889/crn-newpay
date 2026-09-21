@@ -1,5 +1,5 @@
 // Painel do Gestor: execução da rotina (quem está onde agora) e resultado
-// comercial (leads → visitas → propostas → vendas → ativações → TPV).
+// comercial (leads → visitas → propostas → vendas → ativações).
 
 import { Router } from 'express';
 import { table } from '../store.js';
@@ -119,7 +119,6 @@ router.get('/indicadores', (req, res) => {
     return {
       vendedor: { id: v.id, name: v.name, color: v.color, city: v.city },
       ...r,
-      comissaoTotal: r.comissao.total,
       convocacoes: corporativos.length,
       presencasConfirmadas: confirmados.length,
       taxaComparecimento: corporativos.length
@@ -149,17 +148,15 @@ router.get('/indicadores', (req, res) => {
       const cliente = table('clients').find((c) => c.id === d.clientId);
       if (!cliente) continue;
       const chave = fn(cliente);
-      const atual = mapa.get(chave) ?? { chave, vendas: 0, maquinas: 0, tpv: 0 };
+      const atual = mapa.get(chave) ?? { chave, vendas: 0, maquinas: 0 };
       atual.vendas += 1;
       atual.maquinas += d.maquinas;
-      atual.tpv += d.tpvPrevisto;
       mapa.set(chave, atual);
     }
     return [...mapa.values()].sort((a, b) => b.maquinas - a.maquinas);
   };
 
   const totalVendas = soma('vendas');
-  const comissaoTotal = soma('comissaoTotal');
 
   res.json({
     mes,
@@ -174,15 +171,9 @@ router.get('/indicadores', (req, res) => {
       vendas: totalVendas,
       maquinasVendidas: soma('maquinasVendidas'),
       maquinasAtivadas: soma('maquinasAtivadas'),
-      tpvPrevisto: soma('tpvPrevisto'),
-      tpvRealizado: soma('tpvRealizado'),
-      comissaoTotal,
       taxaConversao: soma('visitas') ? Math.round((totalVendas / soma('visitas')) * 100) : 0,
       conversaoPropostaVenda: soma('propostas') ? Math.round((soma('propostasFechadas') / soma('propostas')) * 100) : 0,
-      // Custo comercial por venda = comissão paga dividida pelas vendas do período
-      custoPorVenda: totalVendas ? Math.round(comissaoTotal / totalVendas) : 0,
       ticketMedioMaquinas: totalVendas ? Number((soma('maquinasVendidas') / totalVendas).toFixed(1)) : 0,
-      ticketMedioTPV: totalVendas ? Math.round(soma('tpvPrevisto') / totalVendas) : 0,
       taxaComparecimento: porVendedor.length
         ? Math.round(porVendedor.reduce((s, v) => s + v.taxaComparecimento, 0) / porVendedor.length)
         : 100,
@@ -212,7 +203,6 @@ router.get('/kpis', (req, res) => {
           novosLeads: k?.novosLeads ?? 0,
           propostas: k?.propostas ?? 0,
           maquinas: k?.maquinas ?? 0,
-          tpvPrevisto: k?.tpvPrevisto ?? 0,
         };
       }),
     })),

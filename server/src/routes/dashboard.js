@@ -1,4 +1,4 @@
-// Tela inicial do vendedor: meta, comissão, atividades do dia e funil.
+// Tela inicial do vendedor: meta, atividades do dia e funil.
 // Responde a: quanto falta para a meta, quem visitar, quem retornar e quanto já ganhei.
 
 import { Router } from 'express';
@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
     .slice(0, 5)
     .map((c) => ({
       id: c.id, name: c.name, company: c.company, city: c.city,
-      score: c.score, stage: c.stage, tpvEstimado: c.tpvEstimado,
+      score: c.score, stage: c.stage,
       lastContactAt: c.lastContactAt,
     }));
 
@@ -86,7 +86,6 @@ router.get('/evolucao', (req, res) => {
         (v) => v.userId === userId && new Date(v.at) >= ini && new Date(v.at) <= fim
       ).length,
       maquinas: vendas.reduce((s, x) => s + x.maquinas, 0),
-      tpv: vendas.reduce((s, x) => s + x.tpvPrevisto, 0),
     });
   }
 

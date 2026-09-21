@@ -6,7 +6,6 @@ import Inicio from './pages/Inicio.jsx';
 import Pipeline from './pages/Pipeline.jsx';
 import Calendario from './pages/Calendario.jsx';
 import AgendaDia from './pages/AgendaDia.jsx';
-import AgendaInteligente from './pages/AgendaInteligente.jsx';
 import Tarefas from './pages/Tarefas.jsx';
 import Carteira from './pages/Carteira.jsx';
 import ClienteDetalhe from './pages/ClienteDetalhe.jsx';
@@ -16,7 +15,9 @@ import Objecoes from './pages/Objecoes.jsx';
 import Avisos from './pages/Avisos.jsx';
 import FecharDia from './pages/FecharDia.jsx';
 import Mais from './pages/Mais.jsx';
+import Equipe from './pages/Equipe.jsx';
 import PainelGestor from './pages/PainelGestor.jsx';
+import { TrocaObrigatoria } from './components/TrocarSenha.jsx';
 
 export default function App() {
   const { user, carregando, ehGestor, toasts } = useApp();
@@ -52,6 +53,17 @@ export default function App() {
     );
   }
 
+  // Senha provisória (primeiro acesso ou reset do gestor): o CRM só abre depois
+  // que a pessoa define a própria senha.
+  if (user.mustChangePassword) {
+    return (
+      <>
+        <TrocaObrigatoria />
+        {avisosFlutuantes}
+      </>
+    );
+  }
+
   return (
     <>
       <Routes>
@@ -62,7 +74,6 @@ export default function App() {
           <Route path="/calendario" element={<Calendario />} />
           <Route path="/dia" element={<AgendaDia />} />
           <Route path="/dia/:data" element={<AgendaDia />} />
-          <Route path="/rota" element={<AgendaInteligente />} />
           <Route path="/tarefas" element={<Tarefas />} />
           <Route path="/carteira" element={<Carteira />} />
           <Route path="/carteira/:id" element={<ClienteDetalhe />} />
@@ -77,6 +88,10 @@ export default function App() {
           <Route
             path="/gestor"
             element={ehGestor ? <PainelGestor /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/equipe"
+            element={ehGestor ? <Equipe /> : <Navigate to="/" replace />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

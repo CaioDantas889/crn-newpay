@@ -6,8 +6,44 @@
 import fs from 'node:fs';
 import { replace, id, DB_PATH } from './store.js';
 import { hashPassword } from './auth.js';
+import { config } from './config.js';
 import { addDays, atHour, dateKey, startOfDay } from './lib/dates.js';
-import { calcularComissao, calcularScore, estimarTPV, temperaturaPorScore } from './domain.js';
+import { calcularScore, temperaturaPorScore } from './domain.js';
+
+/* ------------------------------------------------- banco vazio (produção) */
+// `npm run seed:vazio` cria o banco sem nenhum dado fictício: só o primeiro
+// gestor, que entra com senha provisória e troca no primeiro acesso.
+if (process.argv.includes('--vazio')) {
+  const { criarBancoVazio } = await import('./bootstrap.js');
+  const forcar = process.argv.includes('--force');
+
+  if (!forcar && fs.existsSync(DB_PATH)) {
+    console.error('[seed] já existe um banco. Use --force para substituir (os dados atuais somem).');
+    process.exit(1);
+  }
+
+  const argumento = (nome) => {
+    const achado = process.argv.find((a) => a.startsWith(`--${nome}=`));
+    return achado ? achado.slice(nome.length + 3) : '';
+  };
+
+  try {
+    const admin = criarBancoVazio({
+      nome: argumento('nome') || config.admin.nome,
+      email: argumento('email') || config.admin.email,
+      senha: argumento('senha') || config.admin.senha,
+      cidade: argumento('cidade') || config.admin.cidade,
+    });
+    console.log(`[seed] banco vazio criado em ${DB_PATH}`);
+    console.log(`[seed] primeiro acesso: ${admin.email} — troca de senha obrigatória`);
+    console.log('[seed] cadastre a equipe pelo próprio CRM, em Equipe.');
+  } catch (erro) {
+    console.error(`[seed] ${erro.message}`);
+    console.error('[seed] informe NEWPAY_ADMIN_EMAIL e NEWPAY_ADMIN_SENHA, ou --email= e --senha=');
+    process.exit(1);
+  }
+  process.exit(0);
+}
 
 // PRNG com semente fixa -> mesmo conjunto de dados a cada seed
 function mulberry32(a) {
@@ -44,6 +80,7 @@ const iso = (d) => new Date(d).toISOString();
 /* ---------------------------------------------------------------- usuários */
 
 const senha = hashPassword('newpay123');
+// Demonstração: senha conhecida, mas o app exige troca no primeiro acesso real.
 
 const users = [
   {
@@ -92,7 +129,6 @@ const goals = vendedores.flatMap((v) =>
       userId: v.id,
       mes: dateKey(ref).slice(0, 7),
       metaMaquinas: METAS[v.id] + (delta === 0 ? 0 : -2),
-      metaTPV: (METAS[v.id] + (delta === 0 ? 0 : -2)) * 12000,
       metaVisitasDia: v.dailyGoal,
     };
   })
@@ -187,7 +223,6 @@ const clients = NOMES.map(([name, company, segment], i) => {
     temperature,
     stage,
     machines: stage === 'fechado' ? int(1, 3) : 0,
-    tpvEstimado: estimarTPV(diagnostico),
     lastContactAt: iso(addDays(now, -diasSemContato)),
     notes: '',
     createdAt: iso(addDays(now, -int(5, 150))),
@@ -242,7 +277,6 @@ for (const cli of clients) {
 
   const propostaEm = addDays(now, -int(2, 50));
   const maquinas = cli.stage === 'fechado' ? Math.max(1, cli.machines) : int(1, 3);
-  const tpv = cli.tpvEstimado * maquinas;
 
   const fechado = cli.stage === 'fechado';
   const ativado = fechado && chance(0.8);
@@ -252,13 +286,11 @@ for (const cli of clients) {
     clientId: cli.id,
     userId: cli.ownerId,
     maquinas,
-    tpvPrevisto: tpv,
     taxaOfertada: Number((1.49 + rnd()).toFixed(2)),
     status: ativado ? 'ativado' : fechado ? 'fechado' : cli.stage === 'negociacao' ? 'negociacao' : 'proposta',
     propostaAt: iso(propostaEm),
     fechamentoAt: fechado ? iso(addDays(propostaEm, int(1, 10))) : null,
     ativacaoAt: ativado ? iso(addDays(propostaEm, int(2, 14))) : null,
-    tpvRealizado: ativado ? Math.round(tpv * (0.6 + rnd() * 0.6)) : 0,
     notes: '',
     createdAt: iso(propostaEm),
   });
@@ -272,19 +304,16 @@ for (const v of vendedores) {
     const cli = pick(meus);
     const quando = addDays(hoje, -int(0, hoje.getDate() - 1));
     const maquinas = int(1, 2);
-    const tpv = (cli.tpvEstimado || 8000) * maquinas;
     deals.push({
       id: id('deal'),
       clientId: cli.id,
       userId: v.id,
       maquinas,
-      tpvPrevisto: tpv,
       taxaOfertada: Number((1.49 + rnd()).toFixed(2)),
       status: chance(0.75) ? 'ativado' : 'fechado',
       propostaAt: iso(addDays(quando, -int(1, 6))),
       fechamentoAt: iso(quando),
       ativacaoAt: iso(addDays(quando, 1)),
-      tpvRealizado: Math.round(tpv * (0.6 + rnd() * 0.6)),
       notes: '',
       createdAt: iso(quando),
     });
@@ -316,7 +345,6 @@ for (let d = -30; d <= -1; d++) {
       novosLeads: int(0, 3),
       propostas: deals.filter((x) => x.userId === v.id && dateKey(x.propostaAt) === chave).length,
       maquinas: vendasDoDia.reduce((s, x) => s + x.maquinas, 0),
-      tpvPrevisto: vendasDoDia.reduce((s, x) => s + x.tpvPrevisto, 0),
       fechadoAt: iso(atHour(dia, 18, int(0, 59))),
     });
   });
@@ -551,7 +579,7 @@ const objections = [
   {
     objecao: 'Está caro',
     quando: 'Cliente compara a taxa com a máquina atual.',
-    resposta: 'Entendo. Deixa eu te mostrar na prática: com R$ {tpv} passando no cartão por mês, a sua taxa atual de {taxa_atual}% custa R$ {custo_atual} por mês. Na NewPay, com 1,89%, custa R$ {custo_newpay}. A diferença fica no seu caixa, todo mês. Posso fazer essa conta com o seu faturamento real?',
+    resposta: 'Entendo. A sua taxa hoje é {taxa_atual}% e a da NewPay é {taxa_newpay}%. Pega o extrato do mês passado e faz a conta comigo: em cada R$ 1.000 que passa no cartão, essa diferença fica no seu caixa. Quer que eu faça essa conta agora com o seu número?',
     dicas: ['Faça a conta na frente do cliente', 'Fale em reais por mês, nunca em percentual', 'Mostre o comparativo da Biblioteca'],
     categoria: 'preco',
   },
@@ -605,20 +633,9 @@ replace({
   notificationState: [], activity: [], visits, deals, goals, dailyKpis, library, objections,
 });
 
-const ativadasMes = deals.filter(
-  (d) => d.status === 'ativado' && d.ativacaoAt?.slice(0, 7) === mesAtual
-);
-const comissao = calcularComissao({
-  maquinasAtivadas: ativadasMes.reduce((s, d) => s + d.maquinas, 0),
-  tpv: ativadasMes.reduce((s, d) => s + d.tpvRealizado, 0),
-});
-
 console.log(`[seed] banco criado em ${DB_PATH}`);
 console.log(
   `[seed] ${users.length} usuários · ${clients.length} clientes · ${events.length} eventos · ` +
   `${visits.length} visitas · ${deals.length} negócios · ${dailyKpis.length} KPIs diários`
-);
-console.log(
-  `[seed] mês ${mesAtual}: ${ativadasMes.length} ativações · comissão total da equipe R$ ${comissao.total.toLocaleString('pt-BR')}`
 );
 console.log(`[seed] hoje = ${dateKey(hoje)} | login: carlos@newpay.com.br / newpay123`);

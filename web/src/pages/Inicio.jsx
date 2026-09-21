@@ -1,4 +1,4 @@
-// Tela inicial: meta, comissão, o que fazer hoje e o funil.
+// Tela inicial: meta do mês, o que fazer hoje e o funil.
 // Responde em 5 segundos: quanto falta para a meta, quem visitar, quem
 // retornar e quanto já ganhei.
 
@@ -87,17 +87,14 @@ export default function Inicio() {
 
         <div className="meta-grid">
           <div>
-            <span className="rotulo">Comissão acumulada</span>
-            <b>{moeda(resumo.comissao.total)}</b>
-            <small>
-              {moeda(resumo.comissao.porMaquina)} máquinas + {moeda(resumo.comissao.porTPV)} TPV
-              {resumo.comissao.bonus > 0 ? ` + ${moeda(resumo.comissao.bonus)} bônus` : ''}
-            </small>
+            <span className="rotulo">Máquinas ativadas</span>
+            <b>{resumo.maquinasAtivadas}</b>
+            <small>{resumo.maquinasVendidas} vendidas no mês</small>
           </div>
           <div>
-            <span className="rotulo">TPV do mês</span>
-            <b>{moeda(resumo.tpvRealizado)}</b>
-            <small>{moeda(resumo.tpvPrevisto)} previsto em vendas</small>
+            <span className="rotulo">Visitas do mês</span>
+            <b>{resumo.visitas}</b>
+            <small>{resumo.visitasProdutivas} produtivas</small>
           </div>
           <div>
             <span className="rotulo">Ranking</span>
@@ -185,7 +182,7 @@ export default function Inicio() {
                 <div className="info">
                   <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                   <span className="mini">
-                    {c.city} · {moeda(c.tpvEstimado)} de TPV · contato {relativo(c.lastContactAt)}
+                    {c.city} · contato {relativo(c.lastContactAt)}
                   </span>
                 </div>
                 <span className="btn btn-sm">Abrir</span>
@@ -204,8 +201,8 @@ export default function Inicio() {
           <Vazio
             emoji="✅"
             titulo="Nada mais marcado para hoje"
-            texto="Monte a rota de amanhã pela agenda inteligente."
-            acao={<button className="btn btn-brand" onClick={() => navigate('/rota')}>🎯 Montar rota</button>}
+            texto="Agende o retorno dos clientes pela carteira."
+            acao={<button className="btn btn-brand" onClick={() => navigate('/carteira')}>🤝 Abrir carteira</button>}
           />
         ) : (
           proximosCompromissos.map((ev) => (

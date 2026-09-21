@@ -87,6 +87,7 @@ export function AppProvider({ children }) {
       toast,
       entrar,
       sair,
+      definirUsuario: setUser,
       recarregarNotificacoes: carregarNotificacoes,
       ehGestor: user?.role === 'gestor' || user?.role === 'diretoria',
     }),

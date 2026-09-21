@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
-import { moeda } from '../lib/date.js';
 import { Carregando } from '../components/ui.jsx';
 
 export default function Objecoes() {
@@ -55,29 +54,6 @@ export default function Objecoes() {
           </select>
         </div>
 
-        {dados.simulacao && (
-          <>
-            <span className="selo">Simulação para {dados.cliente.company}</span>
-            <div className="simulacao">
-              <div>
-                <span>Taxa atual</span>
-                <b>{dados.simulacao.taxaAtual}%</b>
-              </div>
-              <div>
-                <span>Taxa NewPay</span>
-                <b>{dados.simulacao.taxaNewpay}%</b>
-              </div>
-              <div className="economia">
-                <span>Economia/mês</span>
-                <b>{moeda(dados.simulacao.economiaMensal)}</b>
-              </div>
-            </div>
-            <p className="mini">
-              Sobre {moeda(dados.simulacao.tpv)} de TPV estimado: hoje ele paga {moeda(dados.simulacao.custoAtual)} e
-              pagaria {moeda(dados.simulacao.custoNewpay)} — {moeda(dados.simulacao.economiaAnual)} por ano.
-            </p>
-          </>
-        )}
       </div>
 
       {/* Em telas largas as objeções se distribuem em colunas */}

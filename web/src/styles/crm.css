@@ -197,6 +197,13 @@
 .material.video .icone { background: #fef2f2; border-color: #fecaca; }
 .material.pdf .icone { background: #eff6ff; border-color: #bfdbfe; }
 
+/* O cartão vira coluna quando o gestor tem botões de manutenção embaixo */
+.material-caixa { display: flex; flex-direction: column; border-bottom: 1px solid var(--line); }
+.material-caixa:last-child { border-bottom: none; }
+.material-caixa .material { border-bottom: none; flex: 1; }
+.material-acoes { display: flex; gap: 6px; padding: 0 11px 10px 59px; flex-wrap: wrap; }
+.material-player { width: calc(100% - 70px); margin: 0 11px 8px 59px; height: 36px; }
+
 .objecao { border-left: 4px solid var(--navy-600); }
 .objecao-resposta {
   background: var(--surface-2); border-radius: var(--radius-sm); padding: 11px;

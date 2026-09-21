@@ -56,6 +56,16 @@ export const endpoints = {
   me: () => api.get('/auth/me'),
   equipe: () => api.get('/auth/equipe'),
   meta: () => api.get('/meta'),
+  trocarSenha: (atual, nova) => api.post('/auth/senha', { atual, nova }),
+
+  // cadastro da equipe (gestor)
+  usuarios: () => api.get('/users'),
+  criarUsuario: (dados) => api.post('/users', dados),
+  atualizarUsuario: (id, patch) => api.patch(`/users/${id}`, patch),
+  resetarSenha: (id, senha) => api.post(`/users/${id}/senha`, { senha }),
+  previaRemocaoUsuario: (id) => api.get(`/users/${id}/remocao`),
+  removerUsuario: (id, { transferirPara, forcar } = {}) =>
+    api.del(`/users/${id}${qs({ transferirPara, forcar: forcar ? 1 : undefined })}`),
 
   // dashboard
   dashboard: (mes) => api.get(`/dashboard${qs({ mes })}`),
@@ -105,12 +115,25 @@ export const endpoints = {
   // ranking e conteúdo
   ranking: (mes) => api.get(`/ranking${qs({ mes })}`),
   biblioteca: (params) => api.get(`/content/library${qs(params)}`),
+  criarMaterial: (dados) => api.post('/content/library', dados),
+  // Vídeo e áudio sobem em binário puro: base64 inflaria 33% e estouraria o
+  // limite do corpo JSON.
+  enviarArquivoMaterial: async (arquivo) => {
+    const res = await fetch('/api/content/library/arquivo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': arquivo.type || 'application/octet-stream',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: arquivo,
+    });
+    const dados = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiError(dados?.error ?? 'Não consegui enviar o arquivo.', res.status);
+    return dados;
+  },
+  atualizarMaterial: (id, dados) => api.patch(`/content/library/${id}`, dados),
+  excluirMaterial: (id) => api.del(`/content/library/${id}`),
   objecoes: (clientId) => api.get(`/content/objections${qs({ clientId })}`),
-
-  // agenda inteligente
-  sugestoes: () => api.get('/agenda/sugestoes'),
-  montarRota: (clientIds) => api.post('/agenda/rota', { clientIds }),
-  agendarRota: (dados) => api.post('/agenda/rota/agendar', dados),
 
   // notificações e mural
   notificacoes: () => api.get('/notifications'),

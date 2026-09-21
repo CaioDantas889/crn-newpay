@@ -107,8 +107,8 @@ export default function AgendaDia() {
               titulo="Dia livre"
               texto="Nenhum compromisso agendado."
               acao={
-                <button className="btn btn-brand" onClick={() => navigate('/rota')}>
-                  🎯 Ver clientes sugeridos
+                <button className="btn btn-brand" onClick={() => navigate('/carteira')}>
+                  🤝 Abrir carteira
                 </button>
               }
             />
@@ -178,7 +178,6 @@ export default function AgendaDia() {
 
           <div className="card card-pad coluna">
             <h3>Atalhos</h3>
-            <button className="btn btn-block" onClick={() => navigate('/rota')}>🎯 Montar rota do dia</button>
             <button className="btn btn-block" onClick={() => navigate('/carteira')}>🤝 Abrir carteira</button>
             <button className="btn btn-block" onClick={() => navigate('/avisos')}>📢 Mural de avisos</button>
           </div>

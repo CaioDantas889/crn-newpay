@@ -50,7 +50,6 @@ export default function Pipeline() {
 
   const etapas = Object.entries(meta?.funil ?? {});
   const totalCarteira = clientes.length;
-  const tpvTotal = clientes.reduce((s, c) => s + (c.tpvEstimado || 0), 0);
 
   /** Move o cliente de etapa: aplica na hora e desfaz se a API recusar */
   const mover = async (clienteId, stage) => {
@@ -96,7 +95,11 @@ export default function Pipeline() {
     <>
       <div className="board-resumo">
         <Stat rotulo="Clientes no funil" valor={totalCarteira} destaque extra={`${clientes.filter((c) => c.temperature === 'quente').length} quentes`} />
-        <Stat rotulo="TPV potencial" valor={moeda(tpvTotal)} cor="var(--brand-strong)" />
+        <Stat
+          rotulo="Máquinas na rua"
+          valor={clientes.reduce((s, c) => s + (c.machines || 0), 0)}
+          cor="var(--brand-strong)"
+        />
         <Stat
           rotulo="Em negociação"
           valor={clientes.filter((c) => ['proposta', 'negociacao'].includes(c.stage)).length}
@@ -145,7 +148,6 @@ export default function Pipeline() {
       <div className="board">
         {etapas.map(([chave, info]) => {
           const daEtapa = clientes.filter((c) => c.stage === chave);
-          const tpvEtapa = daEtapa.reduce((s, c) => s + (c.tpvEstimado || 0), 0);
           const participacao = totalCarteira ? Math.round((daEtapa.length / totalCarteira) * 100) : 0;
 
           const recolhida = telaPequena && recolhidas[chave];
@@ -180,7 +182,7 @@ export default function Pipeline() {
                 {telaPequena && <span className="seta">{recolhida ? '▸' : '▾'}</span>}
                 <span className="nome">{info.label}</span>
                 {telaPequena && daEtapa.length > 0 && (
-                  <span className="total-etapa">{moeda(tpvEtapa)}</span>
+                  <span className="total-etapa">{participacao}%</span>
                 )}
                 <span className="contagem" style={{ background: info.cor }}>{daEtapa.length}</span>
               </header>
@@ -235,7 +237,7 @@ export default function Pipeline() {
                           <span className={`score-bola ${c.temperature}`} style={{ width: 22, height: 22, borderRadius: 6, fontSize: '0.62rem' }}>
                             {c.score}
                           </span>
-                          <span className="cartao-valor">{moeda(c.tpvEstimado)}</span>
+                          <span className="cartao-valor">{c.segmentoLabel ?? ''}</span>
 
                           {/* No celular não dá para arrastar: este menu move de etapa */}
                           <button
@@ -295,10 +297,6 @@ export default function Pipeline() {
                                 <b style={{ textTransform: 'capitalize' }}>{c.score} pts · {c.temperature}</b>
                               </div>
                               <div>
-                                <span>TPV estimado</span>
-                                <b>{moeda(c.tpvEstimado)}</b>
-                              </div>
-                              <div>
                                 <span>Máquina atual</span>
                                 <b>{meta.maquinas?.[c.diagnostico?.maquinaAtual] ?? 'Sem diagnóstico'}</b>
                               </div>
@@ -352,7 +350,7 @@ export default function Pipeline() {
               </div>
 
               <footer className="coluna-rodape">
-                <div className="valor">{moeda(tpvEtapa)}</div>
+                <div className="valor">{daEtapa.length}</div>
                 <div className="taxa">
                   {daEtapa.length} cliente(s) · {participacao}% do funil
                 </div>

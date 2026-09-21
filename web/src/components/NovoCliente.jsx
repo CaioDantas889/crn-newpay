@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
+import { mascaraDocumento, mascaraTelefone, validarDocumento, validarTelefone } from '../lib/mascaras.js';
 import { Modal } from './ui.jsx';
 
 export default function NovoCliente({ onFechar, onCriado }) {
@@ -16,6 +17,13 @@ export default function NovoCliente({ onFechar, onCriado }) {
   const [salvando, setSalvando] = useState(false);
 
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  // Campos com formato fixo: o texto já sai formatado enquanto digita
+  const setMascarado = (campo, mascara) => (e) =>
+    setForm((f) => ({ ...f, [campo]: mascara(e.target.value) }));
+
+  const erroDocumento = validarDocumento(form.cnpj);
+  const erroTelefone = validarTelefone(form.phone);
 
   const capturarLocal = () => {
     if (!navigator.geolocation) return toast('Este aparelho não informa a localização.', 'erro');
@@ -86,18 +94,29 @@ export default function NovoCliente({ onFechar, onCriado }) {
       <div className="form-linha duas">
         <div className="campo">
           <label htmlFor="nc-tel">Telefone</label>
-          <input id="nc-tel" className="input" inputMode="tel" value={form.phone} onChange={set('phone')} placeholder="(88) 99999-0000" />
+          <input id="nc-tel" className="input" inputMode="tel" value={form.phone} onChange={setMascarado('phone', mascaraTelefone)} placeholder="(88) 99999-0000" />
+          {erroTelefone && <span className="mini erro-campo">{erroTelefone}</span>}
         </div>
         <div className="campo">
           <label htmlFor="nc-wpp">WhatsApp</label>
-          <input id="nc-wpp" className="input" inputMode="tel" value={form.whatsapp} onChange={set('whatsapp')} placeholder="(88) 99999-0000" />
+          <input id="nc-wpp" className="input" inputMode="tel" value={form.whatsapp} onChange={setMascarado('whatsapp', mascaraTelefone)} placeholder="(88) 99999-0000" />
         </div>
       </div>
 
       <div className="form-linha duas">
         <div className="campo">
-          <label htmlFor="nc-cnpj">CNPJ (opcional)</label>
-          <input id="nc-cnpj" className="input" value={form.cnpj} onChange={set('cnpj')} placeholder="00.000.000/0001-00" />
+        
+        
+          <label htmlFor="nc-cnpj">CNPJ ou CPF (opcional)</label>
+          <input
+            id="nc-cnpj"
+            className="input"
+            inputMode="numeric"
+            value={form.cnpj}
+            onChange={setMascarado('cnpj', mascaraDocumento)}
+            placeholder="CNPJ ou CPF"
+          />
+          {erroDocumento && <span className="mini erro-campo">{erroDocumento}</span>}
         </div>
         <div className="campo">
           <label htmlFor="nc-cidade">Cidade</label>
@@ -119,3 +138,5 @@ export default function NovoCliente({ onFechar, onCriado }) {
     </Modal>
   );
 }
+  
+

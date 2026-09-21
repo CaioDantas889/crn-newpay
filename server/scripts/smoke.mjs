@@ -45,13 +45,18 @@ const gestorLogin = await api('/api/auth/login', { method: 'POST', body: { email
 ok(gestorLogin.status === 200, 'login do gestor', gestorLogin.json?.user?.name);
 const gestor = gestorLogin.json.token;
 
+// A equipe mudou de tamanho? O CRM agora admite gente pela tela de Equipe,
+// então as contagens abaixo saem do próprio cadastro, não de um número fixo.
+const equipeAtiva = (await api('/api/auth/equipe', { token: gestor })).json ?? [];
+const totalVendedores = equipeAtiva.filter((u) => u.role === 'vendedor').length;
+
 ok((await api('/api/events')).status === 401, 'rota protegida sem token devolve 401');
 
 const meta = await api('/api/meta', { token: vendedor });
 ok(Object.keys(meta.json?.segmentos ?? {}).length === 10, 'vocabulário traz os 10 segmentos');
 ok(Object.keys(meta.json?.maquinas ?? {}).length >= 9, 'lista de máquinas concorrentes');
 ok(meta.json?.niveis?.length === 5, 'níveis do ranking', meta.json.niveis.map((n) => n.label).join(' < '));
-ok(meta.json?.kpisDiarios?.length === 5, 'os 5 KPIs diários obrigatórios');
+ok(meta.json?.kpisDiarios?.length === 4, 'os 4 KPIs diarios obrigatorios', meta.json.kpisDiarios.map((k) => k.label).join(' · '));
 
 /* -------------------------------------------------------------- dashboard */
 secao('Dashboard do vendedor');
@@ -59,11 +64,9 @@ secao('Dashboard do vendedor');
 const dash = await api('/api/dashboard', { token: vendedor });
 ok(dash.status === 200, 'GET /api/dashboard');
 ok(dash.json?.resumo?.meta?.metaMaquinas > 0, 'meta do mês definida', `${dash.json?.resumo?.meta?.metaMaquinas} máquinas`);
-ok(
-  typeof dash.json?.resumo?.comissao?.total === 'number',
-  'comissão acumulada calculada',
-  `R$ ${dash.json?.resumo?.comissao?.total?.toLocaleString('pt-BR')} (${dash.json?.resumo?.maquinasAtivadas} ativações)`
-);
+// Vendedor externo da NewPay e salario fixo: o CRM nao calcula comissao
+ok(dash.json?.resumo?.comissao === undefined, 'dashboard nao devolve comissao');
+ok(dash.json?.resumo?.tpvRealizado === undefined, 'dashboard nao devolve TPV');
 ok(dash.json?.resumo?.percentualMeta >= 0, 'percentual da meta', `${dash.json?.resumo?.percentualMeta}%`);
 ok(dash.json?.ranking?.posicao >= 1, 'posição no ranking', `${dash.json?.ranking?.posicao}º de ${dash.json?.ranking?.total}`);
 ok(dash.json?.resumo?.nivel?.label, 'nível do vendedor', `${dash.json?.resumo?.nivel?.emoji} ${dash.json?.resumo?.nivel?.label}`);
@@ -111,7 +114,7 @@ const diag = await api(`/api/clients/${novo.json.id}/diagnostico`, {
 });
 ok(diag.status === 200, 'preencher diagnóstico comercial');
 ok(diag.json?.score === 100 && diag.json?.temperature === 'quente', 'pontuação automática → lead quente', `score ${diag.json?.score}`);
-ok(diag.json?.tpvEstimado > 0, 'TPV estimado pelo diagnóstico', `R$ ${diag.json?.tpvEstimado?.toLocaleString('pt-BR')}`);
+ok(diag.json?.tpvEstimado === undefined, 'diagnostico nao estima mais TPV');
 ok(
   diag.json?.scoreDetalhes?.some((d) => d.chave === 'interesse' && d.pontos === 50),
   'detalhamento mostra de onde vieram os pontos'
@@ -189,7 +192,7 @@ ok(proposta.status === 201 && proposta.json?.status === 'proposta', 'enviar prop
 
 const ativado = await api(`/api/deals/${proposta.json.id}`, { token: vendedor, method: 'PATCH', body: { status: 'ativado' } });
 ok(ativado.json?.status === 'ativado' && ativado.json?.ativacaoAt, 'ativar a máquina');
-ok(ativado.json?.tpvRealizado > 0, 'ativação passa a contar TPV', `R$ ${ativado.json?.tpvRealizado?.toLocaleString('pt-BR')}`);
+ok(ativado.json?.tpvRealizado === undefined, 'negocio ativado nao carrega TPV');
 
 const dashDepois = await api('/api/dashboard', { token: vendedor });
 ok(
@@ -198,16 +201,16 @@ ok(
   `${dash.json.resumo.maquinasAtivadas} → ${dashDepois.json.resumo.maquinasAtivadas}`
 );
 ok(
-  dashDepois.json.resumo.comissao.total > dash.json.resumo.comissao.total,
-  'comissão sobe junto',
-  `R$ ${dash.json.resumo.comissao.total} → R$ ${dashDepois.json.resumo.comissao.total}`
+  dashDepois.json.resumo.nivel?.label,
+  'nivel do ranking acompanha as ativacoes',
+  dashDepois.json.resumo.nivel?.label
 );
 
 /* ------------------------------------------------------------ KPI diário */
 secao('KPI diário obrigatório');
 
 const kpi = await api('/api/kpi', { token: vendedor });
-ok(kpi.json?.campos?.length === 5, 'campos do fechamento diário');
+ok(kpi.json?.campos?.length === 4, 'campos do fechamento diario');
 ok(kpi.json?.calculado?.visitas >= 3, 'CRM pré-preenche com o que foi registrado', `${kpi.json?.calculado?.visitas} visitas hoje`);
 ok(typeof kpi.json?.fechado === 'boolean', 'traz o estado do fechamento', kpi.json?.fechado ? 'já fechado hoje' : 'ainda aberto');
 
@@ -225,7 +228,7 @@ ok(typeof historico.json?.diasSemFechamento === 'number', 'conta dias sem fecham
 secao('Ranking gamificado');
 
 const ranking = await api('/api/ranking', { token: vendedor });
-ok(ranking.json?.linhas?.length === 4, 'ranking da equipe');
+ok(ranking.json?.linhas?.length === totalVendedores, 'ranking da equipe', `${totalVendedores} vendedores`);
 ok(ranking.json.linhas[0].posicao === 1 && ranking.json.linhas[0].nivel?.label, 'líder e nível', `${ranking.json.linhas[0].vendedor.name} · ${ranking.json.linhas[0].nivel.emoji} ${ranking.json.linhas[0].nivel.label}`);
 ok(
   ranking.json.linhas.every((l, i, arr) => i === 0 || arr[i - 1].maquinasAtivadas >= l.maquinasAtivadas),
@@ -242,7 +245,8 @@ ok(lib.json?.itens?.length >= 5, 'materiais na biblioteca', `${lib.json?.itens?.
 const obj = await api(`/api/content/objections?clientId=${alvo.id}`, { token: vendedor });
 ok(obj.json?.itens?.length >= 5, 'respostas prontas', obj.json?.itens?.map((o) => o.objecao).slice(0, 3).join(' · '));
 ok(!obj.json.itens.some((o) => o.resposta.includes('{')), 'marcadores substituídos pelos números do cliente');
-ok(obj.json?.simulacao?.economiaMensal >= 0, 'simulação de economia para o cliente', `R$ ${obj.json?.simulacao?.economiaMensal?.toLocaleString('pt-BR')}/mês`);
+ok(obj.json?.simulacao === undefined, 'simulacao de economia saiu das objecoes');
+ok(obj.json?.taxaNewpay > 0, 'taxa da NewPay continua disponivel para o argumento', `${obj.json?.taxaNewpay}%`);
 
 /* ------------------------------------------------------------- calendário */
 secao('Calendário e agenda');
@@ -266,18 +270,11 @@ ok(
   'vendedor não cria evento corporativo'
 );
 
-const sug = await api('/api/agenda/sugestoes', { token: vendedor });
+// A agenda inteligente saiu do produto: a rota nao existe mais na API
 ok(
-  Array.isArray(sug.json?.sugeridos) && Array.isArray(sug.json?.grupos),
-  'sugestões de visita',
-  sug.json?.destaque?.texto ?? `carteira toda agendada hoje (${sug.json?.agendadosHoje} clientes)`
+  (await api('/api/agenda/sugestoes', { token: vendedor })).status === 404,
+  'agenda inteligente nao responde mais'
 );
-// Se a carteira já está toda agendada, a rota é montada com a própria carteira
-const base = sug.json.sugeridos.length ? sug.json.sugeridos : clientes.json;
-const ids = base.slice(0, 4).map((s) => s.id);
-const rota = await api('/api/agenda/rota', { token: vendedor, method: 'POST', body: { clientIds: ids } });
-ok(rota.json?.paradas?.length === ids.length, 'montar rota', `${rota.json?.totalKm} km · ${rota.json?.minutosTotais} min`);
-ok(rota.json?.mapsUrl?.startsWith('https://www.google.com/maps'), 'link do Google Maps');
 
 const tarefa = await api('/api/tasks', { token: vendedor, method: 'POST', body: { title: 'Tarefa de teste', kind: 'lembrete', dueAt: `${hoje}T17:00:00` } });
 ok(tarefa.status === 201, 'criar tarefa');
@@ -306,15 +303,15 @@ secao('Painel do gestor');
 ok((await api('/api/gestor/indicadores', { token: vendedor })).status === 403, 'vendedor não acessa o painel do gestor');
 
 const visao = await api('/api/gestor/visao-geral', { token: gestor });
-ok(visao.json?.equipe?.length === 4, 'agenda geral da equipe');
+ok(visao.json?.equipe?.length === totalVendedores, 'agenda geral da equipe');
 ok(typeof visao.json?.resumo?.kpisPendentes === 'number', 'quem ainda não fechou o dia', `${visao.json?.resumo?.kpisPendentes} pendente(s)`);
 
 const ind = await api('/api/gestor/indicadores', { token: gestor });
 const t = ind.json?.totais;
 ok(t?.visitas > 0, 'indicadores do mês', `${t?.leadsGerados} leads · ${t?.visitas} visitas · ${t?.propostas} propostas · ${t?.vendas} vendas`);
 ok(t?.taxaConversao >= 0, 'taxa de conversão visita→venda', `${t?.taxaConversao}%`);
-ok(t?.custoPorVenda >= 0, 'custo comercial por venda', `R$ ${t?.custoPorVenda?.toLocaleString('pt-BR')}`);
-ok(t?.ticketMedioMaquinas >= 0, 'ticket médio', `${t?.ticketMedioMaquinas} máquinas · R$ ${t?.ticketMedioTPV?.toLocaleString('pt-BR')} de TPV`);
+ok(t?.custoPorVenda === undefined, 'painel do gestor nao mostra custo por venda (sem comissao)');
+ok(t?.ticketMedioMaquinas >= 0, 'ticket medio', `${t?.ticketMedioMaquinas} maquinas por venda`);
 ok(ind.json?.porCidade?.length > 0, 'vendas por cidade', ind.json?.porCidade?.slice(0, 3).map((c) => `${c.chave}:${c.maquinas}`).join(' · '));
 ok(ind.json?.porSegmento?.length > 0, 'vendas por segmento', ind.json?.porSegmento?.slice(0, 3).map((c) => `${c.chave}:${c.maquinas}`).join(' · '));
 ok(
@@ -324,7 +321,7 @@ ok(
 );
 
 const kpisEquipe = await api('/api/gestor/kpis?dias=7', { token: gestor });
-ok(kpisEquipe.json?.equipe?.length === 4 && kpisEquipe.json?.datas?.length === 7, 'grade de KPIs da equipe (7 dias)');
+ok(kpisEquipe.json?.equipe?.length === totalVendedores && kpisEquipe.json?.datas?.length === 7, 'grade de KPIs da equipe (7 dias)');
 
 const muralGestor = await api('/api/announcements', { token: gestor });
 ok(Array.isArray(muralGestor.json[0]?.pendingReaders), 'gestor vê quem não leu cada comunicado');
@@ -343,7 +340,7 @@ ok(
 const dealTemp = await api('/api/deals', { token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 1 } });
 ok((await api(`/api/deals/${dealTemp.json.id}`, { token: vendedor, method: 'DELETE' })).json?.ok, 'excluir proposta');
 
-// Cliente com máquina ativada carrega comissão: o vendedor não pode apagar
+// Cliente com maquina ativada carrega o resultado do mes: o vendedor nao apaga
 const dealAtivo = await api('/api/deals', {
   token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 2, status: 'ativado' },
 });
@@ -407,6 +404,190 @@ const eventoTemp = await api('/api/events', {
   token: vendedor, method: 'POST', body: { title: 'Compromisso a remover', type: 'visita', start: `${hoje}T19:00:00` },
 });
 ok((await api(`/api/events/${eventoTemp.json.id}`, { token: vendedor, method: 'DELETE' })).json?.ok, 'excluir compromisso');
+
+/* ------------------------------------------------ biblioteca comercial */
+secao('Manutencao da biblioteca');
+
+const bibliotecaAntes = (await api('/api/content/library', { token: vendedor })).json.itens.length;
+
+ok(
+  (await api('/api/content/library', { token: vendedor, method: 'POST', body: { titulo: 'Tentativa', url: 'http://x' } })).status === 403,
+  'vendedor nao publica material'
+);
+
+const material = await api('/api/content/library', {
+  token: gestor, method: 'POST',
+  body: { titulo: `Tabela de taxas ${Date.now()}`, tipo: 'link', categoria: 'Taxas', url: 'https://newpay.com.br/taxas' },
+});
+ok(material.status === 201, 'gestor publica material para a equipe');
+ok(material.json?.categoria === 'taxas', 'categoria normalizada em minuscula');
+ok(
+  (await api('/api/content/library', { token: gestor, method: 'POST', body: { url: 'https://x' } })).status === 400,
+  'material sem titulo e recusado'
+);
+ok(
+  (await api('/api/content/library', { token: gestor, method: 'POST', body: { titulo: 'So o titulo' } })).status === 400,
+  'material sem link nem arquivo e recusado'
+);
+ok(
+  (await api('/api/content/library', { token: vendedor })).json.itens.length === bibliotecaAntes + 1,
+  'o vendedor ja ve o material novo'
+);
+
+const editado = await api(`/api/content/library/${material.json.id}`, {
+  token: gestor, method: 'PATCH', body: { titulo: 'Tabela de taxas revisada' },
+});
+ok(editado.json?.titulo === 'Tabela de taxas revisada', 'gestor edita o material');
+ok(editado.json?.url === 'https://newpay.com.br/taxas', 'link e preservado quando nao muda');
+
+// PDF enviado pelo gestor vai para o disco e volta pela URL publica
+const pdfFalso = `data:application/pdf;base64,${Buffer.from('%PDF-1.4 smoke').toString('base64')}`;
+const comPdf = await api('/api/content/library', {
+  token: gestor, method: 'POST', body: { titulo: 'Apresentacao do smoke', tipo: 'pdf', arquivo: pdfFalso },
+});
+ok(comPdf.json?.url?.startsWith('/uploads/'), 'aceita PDF enviado', comPdf.json?.url);
+ok((await fetch(`${BASE}${comPdf.json.url}`)).status === 200, 'o PDF publicado abre pela URL');
+
+ok(
+  (await api(`/api/content/library/${material.json.id}`, { token: vendedor, method: 'DELETE' })).status === 403,
+  'vendedor nao apaga material'
+);
+const apagado = await api(`/api/content/library/${comPdf.json.id}`, { token: gestor, method: 'DELETE' });
+ok(apagado.json?.arquivoApagado === true, 'apagar material leva o arquivo do disco junto');
+ok((await fetch(`${BASE}${comPdf.json.url}`)).status === 404, 'o arquivo sai do servidor');
+await api(`/api/content/library/${material.json.id}`, { token: gestor, method: 'DELETE' });
+ok(
+  (await api('/api/content/library', { token: vendedor })).json.itens.length === bibliotecaAntes,
+  'biblioteca volta ao tamanho original'
+);
+
+/* ------------------------------------------------- cadastro da equipe */
+secao('Cadastro da equipe e senhas');
+
+ok((await api('/api/users', { token: vendedor })).status === 403, 'vendedor nao acessa o cadastro da equipe');
+
+const equipeToda = await api('/api/users', { token: gestor });
+ok(equipeToda.status === 200 && equipeToda.json.length >= 5, 'gestor lista a equipe', `${equipeToda.json.length} pessoas`);
+ok(equipeToda.json.every((u) => u.password === undefined && u.passwordVersion === undefined), 'listagem nao devolve hash nem versao de senha');
+
+const emailNovo = `smoke_${Date.now()}@newpay.com.br`;
+const admitido = await api('/api/users', {
+  token: gestor, method: 'POST',
+  body: { name: 'Vendedor do Smoke', email: emailNovo, city: 'Iguatu', dailyGoal: 6 },
+});
+ok(admitido.status === 201 && admitido.json?.senhaProvisoria, 'gestor admite vendedor com senha provisoria');
+ok(admitido.json?.user?.mustChangePassword === true, 'novo acesso nasce exigindo troca de senha');
+
+ok(
+  (await api('/api/users', { token: gestor, method: 'POST', body: { name: 'Repetido', email: emailNovo } })).status === 409,
+  'e-mail repetido e recusado'
+);
+ok(
+  (await api('/api/users', { token: gestor, method: 'POST', body: { name: 'Senha Fraca', email: `f${Date.now()}@n.com.br`, senha: '123' } })).status === 400,
+  'senha curta e recusada'
+);
+
+const primeiroAcesso = await api('/api/auth/login', { method: 'POST', body: { email: emailNovo, password: admitido.json.senhaProvisoria } });
+ok(primeiroAcesso.status === 200, 'entra com a senha provisoria');
+const tokenNovo = primeiroAcesso.json.token;
+
+ok(
+  (await api('/api/auth/senha', { token: tokenNovo, method: 'POST', body: { atual: 'chute', nova: 'senha-nova-2026' } })).status === 400,
+  'troca de senha exige a senha atual'
+);
+const trocou = await api('/api/auth/senha', {
+  token: tokenNovo, method: 'POST',
+  body: { atual: admitido.json.senhaProvisoria, nova: 'senha-nova-2026' },
+});
+ok(trocou.json?.user?.mustChangePassword === false, 'troca de senha libera o acesso');
+ok(
+  (await api('/api/auth/login', { method: 'POST', body: { email: emailNovo, password: admitido.json.senhaProvisoria } })).status === 401,
+  'senha provisoria para de valer depois da troca'
+);
+
+// Sessao aberta cai quando a senha muda: e assim que celular perdido perde acesso
+ok(trocou.json?.token && trocou.json.token !== tokenNovo, 'troca de senha devolve token novo');
+ok((await api('/api/auth/me', { token: trocou.json.token })).status === 200, 'quem trocou continua logado');
+ok((await api('/api/auth/me', { token: tokenNovo })).status === 401, 'sessao aberta antes da troca deixa de valer');
+
+const sessaoParaDerrubar = (await api('/api/auth/login', { method: 'POST', body: { email: emailNovo, password: 'senha-nova-2026' } })).json.token;
+const resetada = await api(`/api/users/${admitido.json.user.id}/senha`, { token: gestor, method: 'POST' });
+ok(resetada.json?.senhaProvisoria, 'gestor reseta a senha de quem esqueceu');
+ok((await api('/api/auth/me', { token: sessaoParaDerrubar })).status === 401, 'reset do gestor derruba a sessao aberta');
+ok(
+  (await api(`/api/users/${admitido.json.user.id}`, { token: gestor, method: 'PATCH', body: { active: false } })).json?.active === false,
+  'gestor inativa o acesso'
+);
+ok(
+  (await api('/api/auth/login', { method: 'POST', body: { email: emailNovo, password: resetada.json.senhaProvisoria } })).status === 403,
+  'inativo nao entra mais'
+);
+ok(
+  (await api(`/api/users/${gestorLogin.json.user.id}`, { token: gestor, method: 'PATCH', body: { active: false } })).status === 400,
+  'gestor nao inativa a propria conta'
+);
+
+// Remocao de pessoa: para cadastro errado; quem saiu da empresa se inativa
+const pessoaDescartavel = await api('/api/users', {
+  token: gestor, method: 'POST',
+  body: { name: 'Cadastro Errado do Smoke', email: `errado_${Date.now()}@newpay.com.br` },
+});
+const previa = await api(`/api/users/${pessoaDescartavel.json.user.id}/remocao`, { token: gestor });
+ok(previa.json?.total === 0, 'previa de remocao: cadastro novo nao tem nada preso');
+ok(previa.json?.destinos?.length > 0, 'previa lista para quem transferir a carteira');
+ok(
+  (await api(`/api/users/${pessoaDescartavel.json.user.id}`, { token: gestor, method: 'DELETE' })).status === 200,
+  'gestor remove cadastro sem historico'
+);
+ok(
+  (await api('/api/users', { token: gestor })).json.every((u) => u.id !== pessoaDescartavel.json.user.id),
+  'removido some da equipe'
+);
+
+const comCarteira = await api('/api/users', {
+  token: gestor, method: 'POST',
+  body: { name: 'Vendedor Com Carteira', email: `carteira_${Date.now()}@newpay.com.br` },
+});
+const clienteDele = await api('/api/clients', {
+  token: gestor, method: 'POST',
+  body: { company: `Cliente Transferido ${Date.now()}`, city: 'Iguatu', ownerId: comCarteira.json.user.id },
+});
+const barrado = await api(`/api/users/${comCarteira.json.user.id}`, { token: gestor, method: 'DELETE' });
+ok(barrado.status === 409, 'quem tem carteira nao some sem decisao', barrado.json?.error?.slice(0, 48));
+ok(barrado.json?.itens?.some((i) => i.tabela === 'clients'), 'a recusa diz o que esta preso');
+
+const transferido = await api(
+  `/api/users/${comCarteira.json.user.id}?transferirPara=${login.json.user.id}`,
+  { token: gestor, method: 'DELETE' }
+);
+ok(transferido.json?.transferidos?.clients === 1, 'remocao com transferencia move a carteira');
+ok(
+  (await api(`/api/clients/${clienteDele.json.id}`, { token: vendedor })).json?.ownerId === login.json.user.id,
+  'o cliente ficou com quem recebeu'
+);
+await api(`/api/clients/${clienteDele.json.id}?forcar=1`, { token: gestor, method: 'DELETE' });
+
+ok(
+  (await api(`/api/users/${gestorLogin.json.user.id}`, { token: gestor, method: 'DELETE' })).status === 400,
+  'gestor nao remove a propria conta'
+);
+ok(
+  (await api(`/api/users/${login.json.user.id}`, { token: vendedor, method: 'DELETE' })).status === 403,
+  'vendedor nao remove ninguem'
+);
+
+// Importacao da carteira: o gestor cadastra direto para o vendedor
+const importado = await api('/api/clients', {
+  token: gestor, method: 'POST',
+  body: { company: `Cliente Importado ${Date.now()}`, city: 'Iguatu', ownerId: login.json.user.id },
+});
+ok(importado.status === 201 && importado.json.ownerId === login.json.user.id, 'gestor cadastra cliente na carteira do vendedor');
+const tentativa = await api('/api/clients', {
+  token: vendedor, method: 'POST',
+  body: { company: `Tentativa ${Date.now()}`, ownerId: gestorLogin.json.user.id },
+});
+ok(tentativa.status === 403, 'vendedor nao joga cliente na carteira alheia', tentativa.json?.error);
+await api(`/api/clients/${importado.json.id}?forcar=1`, { token: gestor, method: 'DELETE' });
 
 console.log(`\n${falhas === 0 ? '✔ Tudo certo.' : `✖ ${falhas} verificação(ões) falharam.`}\n`);
 process.exit(falhas === 0 ? 0 : 1);

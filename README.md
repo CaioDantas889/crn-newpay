@@ -3,7 +3,7 @@
 CRM para a equipe de vendas externas da NewPay (maquininhas de cartão), com o
 módulo Calendário integrado. Feito para o vendedor abrir e saber na hora:
 **quantos clientes visitar hoje, quem está mais perto de comprar, quanto falta
-para a meta, quem precisa de retorno e quanto já ganhou de comissão.**
+para a meta e quem precisa de retorno.**
 
 - **`server/`** — API REST em Node.js + Express (JavaScript, ESM)
 - **`web/`** — interface em React + Vite (JavaScript), mobile-first
@@ -38,12 +38,23 @@ npm run seed
 | Vendedora externa (Icó) | `fernanda@newpay.com.br` | `newpay123` |
 | Gerente comercial | `gestor@newpay.com.br` | `newpay123` |
 
+Essas contas (e o atalho no login) só existem no banco de demonstração. Em
+produção o banco nasce vazio, com um único gestor definido por variável de
+ambiente — veja [Hospedagem](#hospedagem-em-produção).
+
 ### Verificação da API
 
-Com o servidor no ar, roda ~80 checagens de ponta a ponta:
+Com o servidor no ar, roda ~130 checagens de ponta a ponta:
 
 ```bash
 npm --prefix server run smoke
+```
+
+O PWA tem verificação própria, que não precisa de navegador (executa o service
+worker num escopo simulado e confere o manifest contra as exigências do Chrome):
+
+```bash
+npm run teste:pwa
 ```
 
 ---
@@ -51,15 +62,15 @@ npm --prefix server run smoke
 ## O que está implementado
 
 ### Dashboard inicial
-Meta do mês (máquinas ativadas x meta, % e quanto falta), comissão acumulada
-com a composição (máquinas + TPV + bônus), TPV, posição no ranking e nível.
+Meta do mês (máquinas ativadas x meta, % e quanto falta), máquinas vendidas,
+visitas do mês, posição no ranking e nível.
 Abaixo: atividades do dia (visitas agendadas, follow-ups pendentes, clientes
 para retornar, propostas enviadas), funil completo e os leads mais perto de
 comprar.
 
 ### Pipeline (quadro do funil)
 Tela em formato de quadro: uma coluna por etapa do funil, um cartão por cliente
-e o total de TPV no rodapé de cada coluna. O cartão fica **vermelho quando o
+e a contagem de clientes no rodapé de cada coluna. O cartão fica **vermelho quando o
 cliente está sem contato há mais de 7 dias** e verde quando fechado. Arrastar o
 cartão muda a etapa (no celular, o botão ⇄ do cartão faz o mesmo). A busca
 global da barra superior filtra o quadro em tempo real.
@@ -84,12 +95,6 @@ Score de 0 a 100 calculado a partir do diagnóstico, com a régua da operação:
 **0–30 Frio · 31–60 Morno · 61–100 Quente.** O vendedor vê a pontuação subir
 enquanto responde, e a ficha do cliente mostra de onde veio cada ponto.
 
-### Agenda inteligente e rota
-O CRM ordena a carteira por oportunidade + tempo sem contato + distância da
-base, agrupa por cidade ("Você possui 5 clientes quentes na região de Iguatu"),
-monta a rota pelo trajeto mais curto, abre no Google Maps e transforma a rota em
-visitas na agenda já com o tempo de deslocamento.
-
 ### Mapa de clientes
 Clientes e leads posicionados por GPS, com filtro por raio ("Você tem 12 leads a
 menos de 3 km"), centralização na posição atual do vendedor e lista dos mais
@@ -99,7 +104,13 @@ próximos.
 Em dois toques: **Interessado · Não interessado · Fechado · Retornar depois**,
 com foto (fachada, máquina atual, contrato), áudio gravado na hora e GPS.
 Cada resultado move o cliente no funil; "retornar" já agenda o follow-up e
-"fechado" já abre o negócio com máquinas e TPV previsto.
+"fechado" já abre o negócio com as máquinas e a taxa ofertada.
+
+O áudio depende de permissão do navegador, que vale **por endereço**: liberar o
+microfone em `localhost:5173` não vale para `localhost:4000` nem para o domínio
+publicado. Quando o navegador recusa, o app diz o motivo exato (bloqueado,
+sem microfone, em uso por outro programa, ou endereço sem HTTPS) em vez de
+falhar em silêncio.
 
 ### Calendário (módulo integrado)
 - **Visão mensal** com cores por tipo: 🔵 visita · 🟢 cliente interessado ·
@@ -127,14 +138,23 @@ Vídeos e PDFs oficiais (abordagem, demonstração, tabela de taxas, comparativo
 argumentário). Nas objeções, a resposta pronta vem **com os números do cliente
 já calculados**: taxa atual x taxa NewPay, custo mensal de cada uma e a economia
 por mês e por ano. Dá para copiar ou mandar no WhatsApp.
+- **A gestão publica e tira material do ar** pela própria tela: link (vídeo,
+  planilha, apresentação) ou arquivo enviado — PDF ou imagem de até 8 MB, que
+  fica no diretório de dados junto com os anexos de visita
+- Aceita **vídeo e áudio** também: o arquivo sobe em binário puro (até 64 MB) e
+  fica no diretório de dados, junto com os anexos de visita
+- Todo mundo tem o botão **📲 Enviar**, que abre o WhatsApp com o link do
+  material pronto para mandar ao lojista
+- Apagar o material apaga o arquivo do servidor junto; vendedor só consome
+- As objeções continuam com resposta e dicas, sem simulação de economia
 
 ### Ranking gamificado
-Pódio, classificação por ativações, comissão, conversão e % da meta, com os
+Pódio, classificação por ativações, conversão e % da meta, com os
 níveis 🥉 Bronze · 🥈 Prata · 🥇 Ouro · 💎 Diamante · 👑 Elite NewPay.
 
 ### KPI diário obrigatório
 Fechamento do dia com os 5 números: visitas realizadas, novos leads, propostas
-enviadas, máquinas vendidas e TPV previsto. O CRM já pré-preenche com o que foi
+enviadas e máquinas vendidas. O CRM já pré-preenche com o que foi
 registrado durante o dia — o vendedor confere e confirma. O histórico mostra
 quais dias ficaram sem fechamento.
 
@@ -145,28 +165,186 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
 | --- | --- | --- |
 | Cliente | Ficha do cliente e menu do cartão no Pipeline | Leva visitas, propostas, compromissos, tarefas e anexos. **Cliente com máquina ativada é protegido** — só o gestor apaga, de propósito |
 | Visita | Ficha do cliente | Apaga também as fotos e o áudio do disco |
-| Proposta / venda | Ficha do cliente | Avisa quando a venda já está ativada e conta na comissão |
+| Proposta / venda | Ficha do cliente | Avisa quando a venda já está ativada e conta na meta do mês |
 | Comunicado | Mural de avisos | Só gestor; leva junto o registro de leitura |
 | Compromisso | Agenda (ao editar) | — |
 | Tarefa | Tarefas | — |
+
+### App instalável no celular (PWA)
+- O vendedor instala na tela inicial e abre como aplicativo, sem barra de
+  endereço: em **Mais** aparece o convite "Instalar na tela inicial" (no iPhone,
+  o passo a passo do menu Compartilhar)
+- **Abre sem internet**: a casca do app fica no aparelho. Os dados continuam
+  vindo do servidor — CRM mostrando funil velho seria pior do que
+  avisar que está sem conexão
+- Atalhos ao segurar o ícone: *Registrar visita*, *Agenda de hoje* e *Pipeline*
+- Ícones gerados por script (`npm --prefix web run icones`), sem dependência de
+  ferramenta de design
+
+### Cadastro da equipe (gestor)
+- Admite vendedor, gestor ou diretoria com e-mail de acesso e **senha
+  provisória gerada na hora** (aparece uma vez, para entregar à pessoa)
+- Edita cargo, cidade, telefone, meta de visitas por dia e base de partida
+  (usada na rota e no mapa) — dá para marcar a base pela localização do celular
+- Reseta senha de quem esqueceu e inativa quem saiu, sem perder o histórico
+- Regras que evitam tiro no pé: e-mail duplicado, senha fraca, inativar a
+  própria conta ou deixar a operação sem nenhum gestor ativo
 
 ### Painel do gestor
 - **Execução do dia**: quem está em reunião, em visita, em rota, atrasado ou sem
   agenda; meta de visitas de cada um; quem ainda não fechou o KPI
 - **Resultado do mês**: leads gerados e trabalhados, visitas (produtivas e
-  perdidas), propostas, vendas, ativações, TPV, taxa de conversão, custo por
-  venda, ticket médio, vendas por cidade e por segmento
+  perdidas), propostas, vendas, ativações, taxa de conversão, ticket médio,
+  vendas por cidade e por segmento
 - **Registro diário**: grade de disciplina de KPI por vendedor
+
+---
+
+## Hospedagem em produção
+
+O mesmo processo Node serve a API e o front (`web/dist`), então basta **um
+serviço** no ar.
+
+### 1. Build do front
+
+```bash
+npm run build
+```
+
+### 2. Variáveis de ambiente
+
+Copie `.env.example` para `.env` (ou configure no painel do host). O mínimo:
+
+```bash
+NODE_ENV=production
+NEWPAY_SECRET=<gere o seu>
+NEWPAY_DATA_DIR=/data
+NEWPAY_ADMIN_EMAIL=voce@empresa.com.br
+NEWPAY_ADMIN_SENHA=<senha do primeiro acesso>
+```
+
+Gere o segredo com:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+O servidor **se recusa a subir** se `NEWPAY_SECRET` faltar, for o valor de
+desenvolvimento ou tiver menos de 24 caracteres.
+
+### 3. Subir
+
+```bash
+npm start
+```
+
+Na primeira vez o banco nasce **vazio**, só com o gestor do `NEWPAY_ADMIN_*`
+(que precisa trocar a senha no primeiro acesso). Nada de cliente fictício: a
+base de demonstração só é gerada fora de produção.
+
+### 4. Onde hospedar
+
+O banco e os anexos são arquivos em disco. **Host com disco efêmero (Vercel,
+planos free de Render/Railway) apaga tudo a cada deploy.** O que serve:
+
+- VPS (Hostinger, Contabo, DigitalOcean, EC2) com um diretório de dados fixo
+- Container com **volume persistente** montado, e `NEWPAY_DATA_DIR` apontando
+  para ele
+- Nos dois casos: HTTPS na frente (nginx, Caddy ou o proxy do host). **Sem
+  HTTPS o navegador bloqueia GPS e câmera** — ou seja, adeus registro de visita
+  com foto, mapa e rota
+
+Faça cópia do diretório de dados para fora do servidor (os backups automáticos
+protegem contra corrupção, não contra perder a máquina).
+
+### Sobre o app instalado
+
+O service worker (`web/public/sw.js`) serve a casca do app e **nunca** guarda
+`/api/` nem `/uploads/`. A navegação é sempre "rede primeiro": assim que um
+deploy sobe, quem abrir o app com internet já pega a versão nova. Os arquivos
+de `assets/` levam hash no nome e podem ficar em cache para sempre.
+
+Se algum dia precisar invalidar tudo que está nos aparelhos, mude a constante
+`VERSAO` no topo do `sw.js` — o service worker apaga os caches antigos ao ativar.
+
+### Front separado da API
+
+Se o front for para outro domínio (CDN, Vercel), desligue o serviço de
+estáticos e libere a origem:
+
+```bash
+NEWPAY_SERVIR_FRONT=false
+NEWPAY_ORIGINS=https://crm.suaempresa.com.br
+```
+
+---
+
+## Colocar a operação real no ar
+
+### Equipe
+Entre com o gestor do primeiro acesso e cadastre todo mundo em **Equipe**. Cada
+pessoa recebe uma senha provisória e troca no primeiro login.
+
+### Tirar a demonstração do caminho
+
+Quando a operação real começar, o banco ainda tem a carteira fictícia do seed
+misturada com o que você já cadastrou. Para separar:
+
+```bash
+npm run limpar:demo
+```
+
+- **Simula por padrão**: mostra o que sairia, o que fica e para quem passam os
+  registros órfãos. Só grava com `--aplicar`, e faz uma cópia do banco antes
+- Reconhece o que é do seed pelo id sequencial dos clientes (`cli_01`…), então
+  **cliente que você cadastrou pelo app fica**, mesmo que tenha usado uma conta
+  de demonstração para criar
+- Visitas, vendas e compromissos seguem o destino do cliente a que pertencem
+- Os quatro vendedores fictícios saem da equipe; o que sobrou no nome deles
+  passa para o gestor (`--transferir-para=email` escolhe outra pessoa)
+- `--modo=tudo` zera a operação inteira (clientes, visitas, vendas, agenda,
+  metas e KPIs) e mantém só a equipe, a biblioteca e as objeções
+- O servidor precisa estar parado — a trava do banco recusa os dois juntos
+
+### Carteira de clientes
+
+Importa de uma planilha, pela própria API (mesmas validações do cadastro feito
+no app):
+
+```bash
+npm run importar:clientes -- --modelo
+```
+
+Isso gera `modelo-carteira.csv` com as colunas esperadas. Depois:
+
+```bash
+npm run importar:clientes -- --arquivo=carteira.csv --email=gestor@empresa.com.br --senha=...
+```
+
+- **Por padrão só simula**: mostra o que criaria, o que é duplicado e o que foi
+  recusado, sem gravar nada. Repita com `--aplicar` para valer
+- Reconhece nomes de coluna livres (`empresa`, `razao_social`, `loja`;
+  `telefone`, `celular`, `whatsapp`; `cidade`, `municipio`...), com ou sem
+  acento, separados por `;`, `,` ou tabulação
+- Cada linha pode dizer de quem é o cliente na coluna `vendedor` (e-mail); ou
+  use `--vendedor=email` para a planilha inteira
+- Não duplica: confere CNPJ e, na falta dele, empresa + cidade
+- Avisa quando um segmento ou etapa da planilha não existe no CRM, em vez de
+  jogar tudo em "Outros" calado
 
 ---
 
 ## Onde ajustar as regras
 
+O vendedor externo da NewPay é **salário fixo**: o CRM não calcula comissão e
+não acompanha TPV. O que ele mede é execução — visitas, propostas, máquinas
+vendidas e ativadas — e é isso que alimenta meta, ranking e painel do gestor.
+
+
 Tudo que é regra de negócio está em **`server/src/domain.js`**:
 
 | O que | Constante |
 | --- | --- |
-| Comissão (R$ por máquina, % do TPV, bônus de meta) | `COMISSAO` |
 | Faixas dos níveis do ranking | `NIVEIS` |
 | Pesos da pontuação de oportunidade | `calcularScore` / `INTERESSES` |
 | Segmentos, máquinas, faturamento, dores | `SEGMENTOS`, `MAQUINAS`, `FATURAMENTOS`, `DORES` |
@@ -183,25 +361,30 @@ Metas mensais por vendedor ficam na tabela `goals` (definidas no seed em
 ```
 server/
   src/
-    index.js          rotas montadas, /uploads, /api/meta
+    index.js          rotas montadas, /uploads, /api/meta, front em produção
+    config.js         variáveis de ambiente e checagens de produção
+    bootstrap.js      como o banco nasce (demo fora de produção, vazio nela)
     domain.js         vocabulário e regras de negócio
-    metrics.js        funil, comissão, ranking, KPIs
+    metrics.js        funil, ranking, KPIs
     notifications.js  regras da central de notificações
-    store.js          persistência (JSON em server/data/db.json)
-    auth.js           login, hash de senha e token
-    seed.js           base de demonstração
-    routes/           auth, dashboard, clients, visits, deals, kpi,
-                      ranking, content, events, tasks, agenda,
+    store.js          persistência (JSON, gravação atômica, backup e trava)
+    auth.js           login, hash de senha, token e senha provisória
+    seed.js           base de demonstração (e --vazio para produção)
+    routes/           auth, users, dashboard, clients, visits, deals, kpi,
+                      ranking, content, events, tasks,
                       announcements, notifications, manager
-  scripts/smoke.mjs   verificação ponta a ponta da API
+  scripts/
+    smoke.mjs             verificação ponta a ponta da API
+    importar-clientes.mjs importação da carteira por CSV
 web/
   src/
     pages/            Início, Carteira, Cliente, Calendário, Agenda do dia,
-                      Agenda inteligente, Tarefas, Ranking, Biblioteca,
-                      Objeções, Avisos, Fechar o dia, Painel do gestor
+                      Tarefas, Ranking, Biblioteca,
+                      Objeções, Avisos, Fechar o dia, Painel do gestor,
+                      Equipe
     components/       AppShell, RegistrarVisita, DiagnosticoModal,
                       NovoCliente, MapaClientes, EventoModal, EventoCard,
-                      AgendarRetorno, NotificacoesPainel, ui
+                      AgendarRetorno, NotificacoesPainel, TrocarSenha, ui
     state/app.jsx     sessão, vocabulário, notificações e avisos
     api/client.js     cliente HTTP e lista de endpoints
     styles/           base.css, modules.css, crm.css
@@ -209,12 +392,43 @@ web/
 
 ### Persistência
 
-Os dados ficam em `server/data/db.json` e os anexos de visita em
-`server/data/uploads/`. A camada de acesso está isolada em
-`server/src/store.js` — para migrar para Postgres ou MySQL basta reimplementar
-esse módulo, sem tocar nas rotas.
+Os dados ficam em `db.json` e os anexos de visita em `uploads/`, ambos dentro
+do diretório de dados (`server/data/` por padrão, ou `NEWPAY_DATA_DIR` em
+produção). A camada de acesso está isolada em `server/src/store.js` — para
+migrar para Postgres ou MySQL basta reimplementar esse módulo, sem tocar nas
+rotas.
 
-### Autenticação
+Três garantias desse arquivo único:
+
+- **Gravação atômica**: escreve em `db.json.tmp` e renomeia. Queda de energia no
+  meio da escrita não deixa o banco pela metade.
+- **Backup rotativo** em `backups/`, a cada 30 minutos de atividade, guardando
+  os 20 mais recentes (`NEWPAY_BACKUP_*`). Se o `db.json` aparecer ilegível, o
+  servidor move o arquivo para `db.corrompido-<data>.json` e sobe a partir do
+  backup mais novo, avisando no log — em vez de começar vazio por cima do que
+  sobrou.
+- **Trava de escrita** (`db.lock`): dois servidores no mesmo diretório de dados
+  se sobrescreveriam, então o segundo se recusa a subir. Se o dono da trava
+  morreu, o próximo assume.
+
+### Autenticação e acessos
 
 Token assinado com HMAC-SHA256 e senha com scrypt (`server/src/auth.js`), sem
-dependências externas. Em produção, defina a variável `NEWPAY_SECRET`.
+dependências externas.
+
+- **Em produção o servidor não sobe sem `NEWPAY_SECRET`** (mínimo de 24
+  caracteres) — sem isso qualquer um que leia o código assinaria um token
+  válido.
+- Quem admite, edita, inativa e reseta senha é o gestor, na tela **Equipe**.
+  Nada disso depende mais do seed.
+- Senha nova (admissão ou reset) nasce **provisória**: aparece uma única vez
+  para o gestor e o CRM exige a troca no primeiro acesso da pessoa.
+- **A sessão dura 30 dias** (`NEWPAY_HORAS_SESSAO`, em horas): vendedor em campo
+  entra uma vez por mês, não toda manhã.
+- **Trocar ou resetar a senha derruba as sessões abertas** daquela pessoa (o
+  token carrega a versão da senha). Quem acabou de trocar continua logado; os
+  outros aparelhos caem no login. É o outro caminho para celular perdido.
+- Inativar em **Equipe** tira o acesso na hora — inclusive de quem já estava
+  logado, sem esperar a sessão vencer — mas mantém o histórico de visitas,
+  vendas e metas da pessoa nos relatórios. É o caminho para celular perdido ou
+  desligamento.

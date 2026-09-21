@@ -1,0 +1,58 @@
+{
+  "id": "/",
+  "name": "NewPay CRM — Vendas Externas",
+  "short_name": "NewPay CRM",
+  "description": "Central de comando do vendedor externo: carteira, funil, agenda, rota e registro de visita.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101935",
+  "theme_color": "#101935",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icone-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Registrar visita",
+      "short_name": "Visitei",
+      "description": "Registra a visita que acabou de acontecer",
+      "url": "/?acao=visita",
+      "icons": [{ "src": "/icone-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Agenda de hoje",
+      "short_name": "Agenda",
+      "description": "Compromissos e visitas do dia",
+      "url": "/dia",
+      "icons": [{ "src": "/icone-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Pipeline",
+      "short_name": "Pipeline",
+      "description": "Quadro do funil de vendas",
+      "url": "/pipeline",
+      "icons": [{ "src": "/icone-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

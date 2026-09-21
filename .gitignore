@@ -4,9 +4,10 @@ node_modules/
 # build
 dist/
 
-# dados locais gerados pelo seed (o banco é recriado com `npm run seed`)
-server/data/db.json
-server/data/uploads/
+# dados locais: banco, anexos, backups e trava de escrita
+# (o banco de demonstração é recriado com `npm run seed`)
+server/data/
+modelo-carteira.csv
 
 # ambiente e ferramentas
 .env

@@ -248,6 +248,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* ------------------------------------------------------------- formulário */
 .campo { display: flex; flex-direction: column; gap: 4px; }
 .campo label { font-size: 0.73rem; font-weight: 650; color: var(--text-2); }
+/* Aviso de campo mal preenchido, logo abaixo do input */
+.erro-campo { color: var(--red); font-weight: 600; }
 .input, .select, .textarea {
   width: 100%; padding: 7px 10px;
   border: 1px solid var(--line-strong); border-radius: var(--radius-sm);

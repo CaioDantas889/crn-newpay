@@ -2,7 +2,7 @@
 // ação "+ Novo", e o conteúdo da rota no meio.
 
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { dateKey, moeda } from '../lib/date.js';
@@ -19,6 +19,7 @@ export default function AppShell() {
   const { user, sair, notificacoes, ehGestor } = useApp();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [parametros, setParametros] = useSearchParams();
 
   const [painelAberto, setPainelAberto] = useState(false);
   const [menuNovo, setMenuNovo] = useState(false);
@@ -40,6 +41,15 @@ export default function AppShell() {
     }, 220);
     return () => clearTimeout(t);
   }, [busca]);
+
+  // Atalhos do app instalado (manifest): abrir direto no registro de visita
+  useEffect(() => {
+    const acao = parametros.get('acao');
+    if (!acao) return;
+    if (['visita', 'cliente', 'compromisso'].includes(acao)) setModal(acao);
+    parametros.delete('acao'); // some da URL para não reabrir ao voltar
+    setParametros(parametros, { replace: true });
+  }, [parametros, setParametros]);
 
   // Fecha o dropdown ao clicar fora
   useEffect(() => {
@@ -76,9 +86,6 @@ export default function AppShell() {
         <NavLink to={`/dia/${hoje}`} className={railClasse}>
           <span className="ico">📅</span> Agenda
         </NavLink>
-        <NavLink to="/rota" className={railClasse}>
-          <span className="ico">🎯</span> Rota
-        </NavLink>
         <NavLink to="/carteira" className={railClasse}>
           <span className="ico">🤝</span> Carteira
         </NavLink>
@@ -89,9 +96,14 @@ export default function AppShell() {
         <div className="rail-sep" />
 
         {ehGestor && (
-          <NavLink to="/gestor" className={railClasse}>
-            <span className="ico">📊</span> Gestor
-          </NavLink>
+          <>
+            <NavLink to="/gestor" className={railClasse}>
+              <span className="ico">📊</span> Gestor
+            </NavLink>
+            <NavLink to="/equipe" className={railClasse}>
+              <span className="ico">👥</span> Equipe
+            </NavLink>
+          </>
         )}
         <NavLink to="/avisos" className={railClasse}>
           <span className="ico">📢</span> Avisos
@@ -130,7 +142,7 @@ export default function AppShell() {
                       <div className="info">
                         <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                         <span className="mini">
-                          {c.city} · {c.stageMeta?.label} · {moeda(c.tpvEstimado)}
+                          {c.city} · {c.stageMeta?.label}
                         </span>
                       </div>
                     </div>

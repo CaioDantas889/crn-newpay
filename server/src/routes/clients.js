@@ -5,7 +5,7 @@ import { find, id, insert, logActivity, remove, table, update } from '../store.j
 import { isManager, requireAuth } from '../auth.js';
 import {
   FUNIL, RESULTADOS_VISITA, RETURN_PRESETS, SEGMENTOS,
-  calcularScore, estimarTPV, temperaturaPorScore,
+  calcularScore, temperaturaPorScore,
 } from '../domain.js';
 import { expandEvent, userCard } from '../serializers.js';
 import { haversine } from '../lib/geo.js';
@@ -43,7 +43,6 @@ router.get('/', (req, res) => {
     score: (a, b) => b.score - a.score,
     contato: (a, b) => b.diasSemContato - a.diasSemContato,
     nome: (a, b) => a.company.localeCompare(b.company),
-    tpv: (a, b) => b.tpvEstimado - a.tpvEstimado,
   };
   lista.sort(ordenacoes[ordem] ?? ordenacoes.score);
 
@@ -101,7 +100,6 @@ router.get('/funil', (req, res) => {
         chave,
         ...info,
         total: doEstagio.length,
-        tpvPotencial: doEstagio.reduce((s, c) => s + (c.tpvEstimado || 0), 0),
         clientes: doEstagio
           .sort((a, b) => b.score - a.score)
           .slice(0, 8)
@@ -164,7 +162,20 @@ router.post('/', (req, res) => {
   };
 
   const { score } = calcularScore(diagnostico);
-  const base = req.user.base ?? { lat: 0, lng: 0 };
+
+  // Gestor pode cadastrar direto na carteira de um vendedor (é assim que a
+  // importação da carteira real funciona); vendedor só cadastra para si.
+  let responsavel = req.user;
+  if (b.ownerId && b.ownerId !== req.user.id) {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ error: 'Só a gestão cadastra na carteira de outro vendedor.' });
+    }
+    const dono = find('users', b.ownerId);
+    if (!dono) return res.status(400).json({ error: 'Vendedor informado não existe.' });
+    responsavel = dono;
+  }
+
+  const base = responsavel.base ?? { lat: 0, lng: 0 };
 
   const cliente = insert('clients', {
     id: id('cli'),
@@ -174,18 +185,17 @@ router.post('/', (req, res) => {
     cnpj: b.cnpj ?? '',
     phone: b.phone ?? '',
     whatsapp: b.whatsapp ?? b.phone ?? '',
-    city: b.city ?? req.user.city,
+    city: b.city ?? responsavel.city,
     region: b.region ?? '',
     address: b.address ?? '',
     lat: Number(b.lat) || base.lat,
     lng: Number(b.lng) || base.lng,
-    ownerId: req.user.id,
+    ownerId: responsavel.id,
     diagnostico,
     score,
     temperature: temperaturaPorScore(score),
     stage: b.stage ?? 'novo',
     machines: 0,
-    tpvEstimado: estimarTPV(diagnostico),
     lastContactAt: new Date().toISOString(),
     notes: b.notes ?? '',
     createdAt: new Date().toISOString(),
@@ -214,7 +224,7 @@ router.patch('/:id', (req, res) => {
   res.json(enriquecer(update('clients', cliente.id, patch)));
 });
 
-/** PUT /api/clients/:id/diagnostico — recalcula score, temperatura e TPV */
+/** PUT /api/clients/:id/diagnostico — recalcula score e temperatura */
 router.put('/:id/diagnostico', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
@@ -238,7 +248,6 @@ router.put('/:id/diagnostico', (req, res) => {
     diagnostico,
     score,
     temperature: temperaturaPorScore(score),
-    tpvEstimado: estimarTPV(diagnostico),
     lastContactAt: new Date().toISOString(),
     stage: cliente.stage === 'novo' ? 'contatado' : cliente.stage,
   });
@@ -291,7 +300,7 @@ router.post('/:id/agendar-retorno', (req, res) => {
 
 /**
  * DELETE /api/clients/:id — remove o cliente e tudo que depende dele.
- * Cliente com máquina ativada carrega histórico de comissão: o vendedor não
+ * Cliente com máquina ativada carrega o resultado do mês: o vendedor não
  * apaga (recebe 409 e a orientação de marcar como perdido); o gestor pode
  * forçar com ?forcar=1.
  */
@@ -310,7 +319,7 @@ router.delete('/:id', (req, res) => {
     const maquinas = ativados.reduce((s, d) => s + d.maquinas, 0);
     return res.status(409).json({
       error:
-        `${cliente.company} tem ${maquinas} máquina(s) ativada(s) e entra no cálculo de comissão. ` +
+        `${cliente.company} tem ${maquinas} máquina(s) ativada(s) e entra no resultado do mês. ` +
         'Marque como "perdido" em vez de excluir, ou peça ao gestor.',
       maquinasAtivadas: maquinas,
     });

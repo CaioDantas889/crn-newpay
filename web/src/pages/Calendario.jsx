@@ -176,7 +176,7 @@ export default function Calendario() {
           <h2>Próximos compromissos</h2>
         </div>
         {proximos.length === 0 ? (
-          <Vazio emoji="🗓️" titulo="Nada agendado à frente" texto="Use a agenda inteligente para montar seu dia." />
+          <Vazio emoji="🗓️" titulo="Nada agendado à frente" texto="Agende retornos pela carteira para encher o seu dia." />
         ) : (
           proximos.map((ev) => (
             <div
