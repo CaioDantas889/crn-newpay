@@ -203,8 +203,8 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
 ### Cadastro da equipe (gestor)
 - Admite vendedor, gestor ou diretoria com e-mail de acesso e **senha
   provisória gerada na hora** (aparece uma vez, para entregar à pessoa)
-- Edita cargo, cidade, telefone, meta de visitas por dia e base de partida
-  (usada na rota e no mapa) — dá para marcar a base pela localização do celular
+- Edita cargo, cidade, telefone e meta de visitas por dia. Quem entra herda a
+  base de partida (usada na rota e no mapa) de quem cadastrou
 - Reseta senha de quem esqueceu e inativa quem saiu, sem perder o histórico
 - Regras que evitam tiro no pé: e-mail duplicado, senha fraca, inativar a
   própria conta ou deixar a operação sem nenhum gestor ativo
@@ -313,6 +313,23 @@ NEWPAY_ORIGINS=https://crm.suaempresa.com.br
 ### Equipe
 Entre com o gestor do primeiro acesso e cadastre todo mundo em **Equipe**. Cada
 pessoa recebe uma senha provisória e troca no primeiro login.
+
+### Acesso de administração pela linha de comando
+
+Quando não há ninguém logado para cadastrar pela tela — banco recém-criado, ou
+a senha do gestor se perdeu:
+
+```bash
+npm run criar:admin -- --email=voce@empresa.com.br --senha="uma senha sua"
+```
+
+- Sem `--email` cria o perfil de desenvolvimento `dev@newpay.com.br`; sem
+  `--senha` sorteia uma e mostra no fim (nenhuma senha padrão fica no código)
+- Nasce como **diretoria** e entra direto, sem troca obrigatória de senha;
+  `--papel=gestor` e `--trocar-senha` mudam isso
+- E-mail que já existe não vira cadastro novo: o script promove a conta,
+  reativa e troca a senha — a sessão aberta nela cai junto
+- O servidor precisa estar parado — a trava do banco recusa os dois juntos
 
 ### Tirar a demonstração do caminho
 

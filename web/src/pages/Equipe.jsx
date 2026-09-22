@@ -22,7 +22,6 @@ const VAZIO = {
   city: '',
   phone: '',
   dailyGoal: 8,
-  base: null,
 };
 
 export default function Equipe() {
@@ -170,17 +169,6 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
     onChange: (e) => setForm({ ...form, [chave]: e.target.value }),
   });
 
-  const usarMinhaLocalizacao = () => {
-    if (!navigator.geolocation) return toast('Este aparelho não informa a localização.', 'erro');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setForm({ ...form, base: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
-        toast('Base definida pela sua posição atual.');
-      },
-      () => toast('Não consegui pegar a localização.', 'erro')
-    );
-  };
-
   const salvar = async () => {
     setSalvando(true);
     try {
@@ -192,7 +180,6 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
         city: form.city,
         phone: form.phone,
         dailyGoal: Number(form.dailyGoal) || 0,
-        ...(form.base ? { base: form.base } : {}),
       };
 
       if (novo) {
@@ -280,18 +267,6 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
             <input id="eq-meta" className="input" type="number" min="0" max="30" {...campo('dailyGoal')} />
           </div>
         )}
-      </div>
-
-      <div className="campo">
-        <label>Base de partida (usada na rota e no mapa)</label>
-        <div className="linha">
-          <span className="mini crescer">
-            {form.base
-              ? `${form.base.lat.toFixed(4)}, ${form.base.lng.toFixed(4)}`
-              : 'Ainda sem coordenada — usa a sua base.'}
-          </span>
-          <button type="button" className="btn btn-sm" onClick={usarMinhaLocalizacao}>📍 Marcar aqui</button>
-        </div>
       </div>
     </Modal>
   );

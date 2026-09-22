@@ -116,6 +116,17 @@ git pull && docker compose up -d --build
 
 O volume não é tocado: os dados continuam.
 
+**Repor o acesso de administração** (senha perdida, ou ninguém logado para
+cadastrar pela tela). O servidor precisa sair do ar por um minuto — a trava do
+banco não deixa dois processos gravando:
+
+```bash
+docker compose stop && docker compose run --rm crm node server/scripts/criar-admin.mjs --email=voce@empresa.com.br --senha="uma senha sua" && docker compose up -d
+```
+
+E-mail que já existe é promovido e tem a senha trocada, em vez de duplicar o
+cadastro. Sem `--senha` o script sorteia uma e mostra na tela.
+
 **Backup para fora do servidor** (o backup automático interno protege contra
 arquivo corrompido, não contra perder a máquina):
 

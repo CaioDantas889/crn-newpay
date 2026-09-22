@@ -10,6 +10,7 @@
     "seed": "node src/seed.js --force",
     "smoke": "node scripts/smoke.mjs",
     "seed:vazio": "node --env-file-if-exists=../.env --env-file-if-exists=.env src/seed.js --vazio",
+    "criar:admin": "node --env-file-if-exists=../.env --env-file-if-exists=.env scripts/criar-admin.mjs",
     "importar:clientes": "node --env-file-if-exists=../.env --env-file-if-exists=.env scripts/importar-clientes.mjs",
     "limpar:demo": "node --env-file-if-exists=../.env --env-file-if-exists=.env scripts/limpar-demo.mjs"
   },
