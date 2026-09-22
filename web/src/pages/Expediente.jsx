@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
+import { duracao } from '../lib/date.js';
 import { Carregando, Vazio } from '../components/ui.jsx';
 
 const hora = (iso) =>
@@ -11,13 +12,6 @@ const hora = (iso) =>
 
 const dia = (data) =>
   new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', weekday: 'short' });
-
-/** 425 minutos → "7h05" */
-const duracao = (minutos = 0) => {
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-  return h ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
-};
 
 const MOTIVOS_GPS = {
   1: 'Localização bloqueada para este endereço. Libere no cadeado da barra de endereço.',

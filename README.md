@@ -197,8 +197,7 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
   localização", porque travar o começo do dia por causa de sinal seria pior
 - Não deixa abrir dois expedientes ao mesmo tempo nem encerrar o que não
   começou; jornada esquecida aberta por mais de 18h fica marcada para revisão
-- O gestor vê quem já começou o dia (`/api/jornada/equipe`) e corrige horário
-  errado com justificativa obrigatória, que fica registrada no próprio dia
+- O gestor acompanha e corrige tudo isso na aba **Ponto** do painel (abaixo)
 
 ### Cadastro da equipe (gestor)
 - Admite vendedor, gestor ou diretoria com e-mail de acesso e **senha
@@ -215,6 +214,12 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
 - **Resultado do mês**: leads gerados e trabalhados, visitas (produtivas e
   perdidas), propostas, vendas, ativações, taxa de conversão, ticket médio,
   vendas por cidade e por segmento
+- **Ponto**: quem está em campo agora, quem não bateu o ponto, horas do dia e
+  cada batida com horário, endereço e link do mapa. O gestor **corrige** horário
+  errado e **lança** o expediente que ninguém bateu (celular sem bateria, sinal
+  ruim) — os dois exigem motivo, que fica gravado no registro junto com o nome
+  de quem mexeu. Lançamento manual aparece marcado como "lançado pela gestão",
+  para nunca se confundir com batida do aparelho
 - **Registro diário**: grade de disciplina de KPI por vendedor
 
 ---

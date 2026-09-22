@@ -152,20 +152,24 @@ router.get('/equipe', (req, res) => {
   const linhas = table('users')
     .filter((u) => u.role === 'vendedor' && u.active !== false)
     .map((u) => {
-      const doDia = table('jornadas').filter(
-        (j) => j.userId === u.id && new Date(j.inicioAt) >= ini && new Date(j.inicioAt) <= fim
-      );
+      const doDia = table('jornadas')
+        .filter((j) => j.userId === u.id && new Date(j.inicioAt) >= ini && new Date(j.inicioAt) <= fim)
+        .sort((a, b) => new Date(a.inicioAt) - new Date(b.inicioAt));
       const aberta = doDia.find((j) => !j.fimAt);
+      const ultimaSaida = [...doDia].reverse().find((j) => j.fimAt);
 
       return {
         vendedor: { id: u.id, name: u.name, color: u.color, city: u.city },
         comecou: doDia.length > 0,
         emAndamento: Boolean(aberta),
         inicioAt: doDia[0]?.inicioAt ?? null,
-        fimAt: doDia.find((j) => j.fimAt)?.fimAt ?? null,
+        fimAt: ultimaSaida?.fimAt ?? null,
         inicioLocal: comMapa(doDia[0]?.inicioLocal ?? null),
         inicioEndereco: doDia[0]?.inicioEndereco ?? null,
         minutos: doDia.reduce((s, j) => s + (j.fimAt ? j.duracaoMin : minutosEntre(j.inicioAt, new Date())), 0),
+        revisar: doDia.some((j) => j.revisar),
+        // Cada batida do dia com o seu id: é por ela que a correção acontece.
+        registros: doDia.map(expandir),
       };
     })
     .sort((a, b) => Number(b.comecou) - Number(a.comecou) || a.vendedor.name.localeCompare(b.vendedor.name));
@@ -176,6 +180,64 @@ router.get('/equipe', (req, res) => {
     naoComecaram: linhas.filter((l) => !l.comecou).length,
     linhas,
   });
+});
+
+/**
+ * POST /api/jornada/manual — o gestor lança o expediente que ninguém bateu.
+ * Correção só existe sobre registro existente; quando o vendedor trabalhou o
+ * dia inteiro e esqueceu o botão, não há o que corrigir — tem que nascer aqui,
+ * marcado como lançamento e com motivo, para não virar hora fabricada em
+ * silêncio.
+ */
+router.post('/manual', (req, res) => {
+  if (!isManager(req.user)) return res.status(403).json({ error: 'Só a gestão lança expediente.' });
+
+  const alvo = find('users', String(req.body?.userId ?? ''));
+  if (!alvo) return res.status(400).json({ error: 'Vendedor não encontrado.' });
+
+  const justificativa = String(req.body?.justificativa ?? '').trim();
+  if (justificativa.length < 5) {
+    return res.status(400).json({ error: 'Explique o motivo do lançamento (mínimo de 5 letras).' });
+  }
+
+  const inicio = new Date(req.body?.inicioAt);
+  if (Number.isNaN(inicio.getTime())) return res.status(400).json({ error: 'Horário de início inválido.' });
+
+  const fim = req.body?.fimAt ? new Date(req.body.fimAt) : null;
+  if (fim && Number.isNaN(fim.getTime())) return res.status(400).json({ error: 'Horário de fim inválido.' });
+  if (fim && fim < inicio) return res.status(400).json({ error: 'O fim não pode ser antes do início.' });
+  if (inicio > new Date()) return res.status(400).json({ error: 'Não dá para lançar expediente no futuro.' });
+
+  // Sem fim, o lançamento deixaria uma jornada aberta — e o vendedor não
+  // conseguiria mais bater a própria entrada.
+  if (!fim && jornadaAberta(alvo.id)) {
+    return res.status(409).json({ error: `${alvo.name} já está com um expediente aberto.` });
+  }
+
+  const duracaoMin = fim ? minutosEntre(inicio, fim) : 0;
+  const agora = new Date().toISOString();
+
+  const jornada = insert('jornadas', {
+    id: id('jor'),
+    userId: alvo.id,
+    data: dateKey(inicio),
+    inicioAt: inicio.toISOString(),
+    inicioLocal: null,
+    inicioEndereco: null,
+    fimAt: fim ? fim.toISOString() : null,
+    fimLocal: null,
+    fimEndereco: null,
+    duracaoMin,
+    revisar: duracaoMin > MAXIMO_HORAS * 60,
+    observacao: '',
+    justificativa,
+    lancadoPor: req.user.id,
+    corrigidoAt: agora,
+    createdAt: agora,
+  });
+
+  logActivity({ userId: req.user.id, action: 'expediente_lancado', targetId: jornada.id });
+  res.status(201).json(expandir(jornada));
 });
 
 /** PATCH /api/jornada/:id — correção pelo gestor, com justificativa */

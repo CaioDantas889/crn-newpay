@@ -34,6 +34,13 @@ export const isToday = (d) => isSameDay(d, new Date());
 export const hora = (d) =>
   new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+/** 425 minutos → "7h05" */
+export const duracao = (minutos = 0) => {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return h ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
+};
+
 export const diaMes = (d) =>
   new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 

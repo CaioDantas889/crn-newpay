@@ -477,6 +477,56 @@ const corrigido = await api(`/api/jornada/${saida.json.id}`, {
 });
 ok(corrigido.json?.justificativa && corrigido.json?.duracaoMin >= 60, 'gestor corrige com motivo registrado');
 
+// Lançamento manual: o dia que ninguém bateu não tem registro para corrigir
+const duasHorasAtras = new Date(Date.now() - 2 * 3600_000).toISOString();
+const umaHoraAtras = new Date(Date.now() - 3600_000).toISOString();
+const daquiUmaHora = new Date(Date.now() + 3600_000).toISOString();
+
+ok(
+  (await api('/api/jornada/manual', { token: vendedor, method: 'POST', body: {} })).status === 403,
+  'vendedor nao lanca o proprio expediente'
+);
+ok(
+  (await api('/api/jornada/manual', {
+    token: gestor, method: 'POST',
+    body: { userId: login.json.user.id, inicioAt: duasHorasAtras, fimAt: umaHoraAtras },
+  })).status === 400,
+  'lancamento exige justificativa'
+);
+ok(
+  (await api('/api/jornada/manual', {
+    token: gestor, method: 'POST',
+    body: { userId: login.json.user.id, inicioAt: umaHoraAtras, fimAt: duasHorasAtras, justificativa: 'invertido de proposito' },
+  })).status === 400,
+  'lancamento com fim antes do inicio recusado'
+);
+ok(
+  (await api('/api/jornada/manual', {
+    token: gestor, method: 'POST',
+    body: { userId: login.json.user.id, inicioAt: daquiUmaHora, justificativa: 'expediente do futuro' },
+  })).status === 400,
+  'nao lanca expediente no futuro'
+);
+
+const lancado = await api('/api/jornada/manual', {
+  token: gestor, method: 'POST',
+  body: {
+    userId: login.json.user.id,
+    inicioAt: duasHorasAtras,
+    fimAt: umaHoraAtras,
+    justificativa: 'celular sem bateria, trabalhou o dia todo',
+  },
+});
+ok(lancado.status === 201 && lancado.json?.duracaoMin === 60, 'gestor lanca expediente que nao foi batido', `${lancado.json?.duracaoMin} min`);
+ok(Boolean(lancado.json?.lancadoPor), 'lancamento fica marcado como feito pela gestao');
+
+const painelDepois = await api('/api/jornada/equipe', { token: gestor });
+const linhaVendedor = painelDepois.json?.linhas?.find((l) => l.vendedor.id === login.json.user.id);
+ok(
+  linhaVendedor?.registros?.some((r) => r.id === lancado.json.id),
+  'painel de ponto traz as batidas do dia com id para corrigir'
+);
+
 /* ------------------------------------------------ biblioteca comercial */
 secao('Manutencao da biblioteca');
 

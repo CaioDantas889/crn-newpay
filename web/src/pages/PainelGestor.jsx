@@ -1,12 +1,12 @@
-// Painel do Gestor: execução da rotina hoje, resultado comercial do mês e
-// disciplina de registro diário.
+// Painel do Gestor: execução da rotina hoje, ponto da equipe, resultado
+// comercial do mês e disciplina de registro diário.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
-import { useRecurso } from '../state/app.jsx';
-import { dateKey, hora, moeda } from '../lib/date.js';
-import { Avatar, Carregando, Progresso, Stat } from '../components/ui.jsx';
+import { useApp, useRecurso } from '../state/app.jsx';
+import { dateKey, duracao, hora, moeda, pad } from '../lib/date.js';
+import { Avatar, Carregando, Modal, Progresso, Stat, Vazio } from '../components/ui.jsx';
 
 const SITUACOES = {
   em_reuniao: '🔴 Em reunião',
@@ -44,6 +44,7 @@ export default function PainelGestor() {
 
       <div className="abas">
         <button className={`aba${aba === 'hoje' ? ' ativa' : ''}`} onClick={() => setAba('hoje')}>Execução do dia</button>
+        <button className={`aba${aba === 'ponto' ? ' ativa' : ''}`} onClick={() => setAba('ponto')}>Ponto</button>
         <button className={`aba${aba === 'resultado' ? ' ativa' : ''}`} onClick={() => setAba('resultado')}>Resultado do mês</button>
         <button className={`aba${aba === 'kpis' ? ' ativa' : ''}`} onClick={() => setAba('kpis')}>Registro diário</button>
       </div>
@@ -145,6 +146,9 @@ export default function PainelGestor() {
           </div>
         </>
       )}
+
+      {/* ==================================================== PONTO ===== */}
+      {aba === 'ponto' && <PontoEquipe data={data} setData={setData} />}
 
       {/* ============================================ RESULTADO DO MÊS === */}
       {aba === 'resultado' && (
@@ -302,5 +306,206 @@ export default function PainelGestor() {
         )
       )}
     </div>
+  );
+}
+
+/* ================================================================ ponto == */
+
+const horaCurta = (iso) => (iso ? hora(iso) : '--:--');
+
+/** ISO → valor de <input type="datetime-local"> em horário local */
+const paraInput = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${dateKey(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/** Onde a batida aconteceu, com link do mapa quando o aparelho informou */
+function LocalBatida({ registro }) {
+  const { inicioLocal: local, inicioEndereco: endereco } = registro;
+  if (!local?.mapa) return <> · sem localização</>;
+  return (
+    <>
+      {' · '}
+      <a href={local.mapa} target="_blank" rel="noreferrer">{endereco || 'ver no mapa'}</a>
+    </>
+  );
+}
+
+/**
+ * Ponto da equipe no dia: quem bateu, a que horas, de onde — e a correção do
+ * gestor. Toda alteração feita aqui fica gravada com o motivo e o nome de quem
+ * mexeu: ponto corrigido sem rastro não serve de prova para ninguém.
+ */
+function PontoEquipe({ data, setData }) {
+  const { dados, carregando, recarregar } = useRecurso(() => endpoints.jornadaEquipe(data), [data]);
+  const [ajuste, setAjuste] = useState(null);
+
+  if (carregando || !dados) return <Carregando linhas={5} />;
+
+  const minutosDoDia = dados.linhas.reduce((s, l) => s + l.minutos, 0);
+  const aRevisar = dados.linhas.filter((l) => l.revisar).length;
+
+  return (
+    <>
+      <div className="linha" style={{ flexWrap: 'wrap' }}>
+        <input type="date" className="input" style={{ width: 'auto' }} value={data} onChange={(e) => setData(e.target.value)} />
+        <button className="btn btn-sm" onClick={() => setData(dateKey())}>Hoje</button>
+      </div>
+
+      <div className="grid grid-4">
+        <Stat rotulo="Em campo agora" valor={dados.emCampo} destaque extra="Expediente aberto" />
+        <Stat
+          rotulo="Não bateram o ponto"
+          valor={dados.naoComecaram}
+          cor={dados.naoComecaram > 0 ? 'var(--red)' : 'var(--green)'}
+          extra={`de ${dados.linhas.length} vendedores`}
+        />
+        <Stat rotulo="Horas no dia" valor={duracao(minutosDoDia)} cor="var(--blue)" extra="Somando a equipe" />
+        <Stat
+          rotulo="A revisar"
+          valor={aRevisar}
+          cor={aRevisar > 0 ? 'var(--orange)' : 'var(--green)'}
+          extra={aRevisar > 0 ? 'Jornada longa demais' : 'Nada fora da curva'}
+        />
+      </div>
+
+      {dados.linhas.length === 0 ? (
+        <div className="card">
+          <Vazio emoji="⏱️" titulo="Nenhum vendedor ativo" texto="Cadastre a equipe para acompanhar o ponto." />
+        </div>
+      ) : (
+        <div className="grid-auto-larga">
+          {dados.linhas.map((l) => (
+            <div key={l.vendedor.id} className="card card-pad coluna">
+              <div className="linha">
+                <Avatar nome={l.vendedor.name} cor={l.vendedor.color} />
+                <div className="crescer">
+                  <b className="truncar" style={{ display: 'block' }}>{l.vendedor.name}</b>
+                  <span className="mini">{l.vendedor.city || 'sem cidade'}</span>
+                </div>
+                <span className={`chip${l.emAndamento ? ' chip-ok' : l.comecou ? '' : ' chip-alerta'}`}>
+                  {l.emAndamento ? 'em campo' : l.comecou ? duracao(l.minutos) : 'sem ponto'}
+                </span>
+              </div>
+
+              {l.registros.length === 0 ? (
+                <p className="mini">Nada registrado neste dia.</p>
+              ) : (
+                l.registros.map((r) => (
+                  <div key={r.id} className="entre">
+                    <span className="mini">
+                      <b>{horaCurta(r.inicioAt)} → {r.fimAt ? horaCurta(r.fimAt) : 'em aberto'}</b>
+                      {r.fimAt ? ` · ${duracao(r.duracaoMin)}` : ''}
+                      {r.lancadoPor ? ' · lançado pela gestão' : ''}
+                      {r.revisar ? ' · ⚠️ revisar' : ''}
+                      {r.justificativa ? ` · ${r.justificativa}` : ''}
+                      <LocalBatida registro={r} />
+                    </span>
+                    <button className="btn btn-sm" onClick={() => setAjuste({ vendedor: l.vendedor, registro: r })}>
+                      Corrigir
+                    </button>
+                  </div>
+                ))
+              )}
+
+              <div className="detalhe-acoes">
+                <button className="btn btn-sm" onClick={() => setAjuste({ vendedor: l.vendedor, registro: null })}>
+                  + Lançar expediente
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ajuste && (
+        <AjustarPonto
+          vendedor={ajuste.vendedor}
+          registro={ajuste.registro}
+          data={data}
+          onFechar={() => setAjuste(null)}
+          onSalvo={recarregar}
+        />
+      )}
+    </>
+  );
+}
+
+/** Correção de uma batida, ou lançamento do expediente que ninguém bateu */
+function AjustarPonto({ vendedor, registro, data, onFechar, onSalvo }) {
+  const { toast } = useApp();
+  const novo = !registro;
+  const [inicio, setInicio] = useState(registro ? paraInput(registro.inicioAt) : `${data}T08:00`);
+  const [fim, setFim] = useState(registro ? paraInput(registro.fimAt) : `${data}T17:00`);
+  const [justificativa, setJustificativa] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      const corpo = {
+        justificativa,
+        inicioAt: inicio ? new Date(inicio).toISOString() : undefined,
+        fimAt: fim ? new Date(fim).toISOString() : undefined,
+      };
+      if (novo) {
+        await endpoints.lancarExpediente({ ...corpo, userId: vendedor.id });
+        toast(`Expediente lançado para ${vendedor.name.split(' ')[0]}.`);
+      } else {
+        await endpoints.corrigirExpediente(registro.id, corpo);
+        toast('Ponto corrigido.');
+      }
+      onSalvo();
+      onFechar();
+    } catch (erro) {
+      toast(erro.message, 'erro');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal
+      titulo={novo ? 'Lançar expediente' : 'Corrigir ponto'}
+      subtitulo={vendedor.name}
+      onFechar={onFechar}
+      rodape={
+        <>
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : novo ? 'Lançar' : 'Salvar correção'}
+          </button>
+        </>
+      }
+    >
+      <div className="form-linha duas">
+        <div className="campo">
+          <label htmlFor="pt-inicio">Entrada</label>
+          <input id="pt-inicio" className="input" type="datetime-local" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+        </div>
+        <div className="campo">
+          <label htmlFor="pt-fim">Saída</label>
+          <input id="pt-fim" className="input" type="datetime-local" value={fim} onChange={(e) => setFim(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="campo">
+        <label htmlFor="pt-motivo">Motivo</label>
+        <input
+          id="pt-motivo"
+          className="input"
+          value={justificativa}
+          onChange={(e) => setJustificativa(e.target.value)}
+          placeholder={novo ? 'Ex.: celular sem bateria, trabalhou o dia todo' : 'Ex.: esqueceu de encerrar'}
+        />
+        <span className="mini">
+          Fica gravado no registro junto com o seu nome.{' '}
+          {novo
+            ? 'Sem a saída, o expediente nasce aberto.'
+            : 'Deixe a saída em branco para manter o expediente aberto.'}
+        </span>
+      </div>
+    </Modal>
   );
 }

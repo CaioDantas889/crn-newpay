@@ -141,6 +141,7 @@ export const endpoints = {
   encerrarExpediente: (local) => api.post('/jornada/saida', local ?? {}),
   jornadaEquipe: (data) => api.get(`/jornada/equipe${qs({ data })}`),
   corrigirExpediente: (id, dados) => api.patch(`/jornada/${id}`, dados),
+  lancarExpediente: (dados) => api.post('/jornada/manual', dados),
 
   // notificações e mural
   notificacoes: () => api.get('/notifications'),
