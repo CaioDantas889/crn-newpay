@@ -95,17 +95,19 @@ export default function Carteira() {
                   </button>
                 ))}
               </div>
-              <div className="linha" style={{ flexWrap: 'wrap' }}>
-                <span className="selo">Ordenar por:</span>
-                {ORDENS.map((o) => (
-                  <button
-                    key={o.chave}
-                    className={`btn btn-sm${ordem === o.chave ? ' btn-primary' : ''}`}
-                    onClick={() => setOrdem(o.chave)}
-                  >
-                    {o.label}
-                  </button>
-                ))}
+              <div className="coluna" style={{ gap: 5 }}>
+                <span className="selo">Ordenar por</span>
+                <div className="opcoes">
+                  {ORDENS.map((o) => (
+                    <button
+                      key={o.chave}
+                      className={`opcao${ordem === o.chave ? ' ativa' : ''}`}
+                      onClick={() => setOrdem(o.chave)}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -122,7 +124,7 @@ export default function Carteira() {
               lista.map((c) => (
                 <div
                   key={c.id}
-                  className="cliente-linha"
+                  className="cliente-linha linha-carteira"
                   onClick={() => navigate(`/carteira/${c.id}`)}
                   role="button"
                   tabIndex={0}
@@ -131,20 +133,20 @@ export default function Carteira() {
                   <span className={`score-bola ${c.temperature}`}>{c.score}</span>
                   <div className="info">
                     <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
-                    <span className="mini">
+                    <span className="mini truncar" style={{ display: 'block' }}>
                       {c.segmentoLabel} · {c.city}
                     </span>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div className="etapa">
                     <span className="chip" style={{ color: c.stageMeta.cor, borderColor: c.stageMeta.cor }}>
                       {c.stageMeta.label}
                     </span>
-                    <div
-                      className="mini"
-                      style={{ marginTop: 4, color: c.diasSemContato > 7 ? 'var(--red)' : 'var(--text-3)' }}
-                    >
-                      {c.diasSemContato === 0 ? 'contato hoje' : `${c.diasSemContato}d sem contato`}
-                    </div>
+                  </div>
+                  <div
+                    className="contato mini"
+                    style={c.diasSemContato > 7 ? { color: 'var(--red)', fontWeight: 650 } : undefined}
+                  >
+                    {c.diasSemContato === 0 ? 'contato hoje' : `${c.diasSemContato}d sem contato`}
                   </div>
                 </div>
               ))

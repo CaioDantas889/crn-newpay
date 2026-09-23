@@ -3,8 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#101935" />
+    <meta name="theme-color" content="#04070b" />
     <meta name="description" content="Central de comando do vendedor externo NewPay: carteira, funil, agenda, rota e registro de visita." />
+
+    <!-- Tema antes da primeira pintura: sem isso a tela pisca branca no escuro.
+         A mesma regra está em src/lib/tema.js, que cuida da troca em uso. -->
+    <script>
+      (function () {
+        var tema;
+        try { tema = localStorage.getItem('newpay-tema'); } catch (e) { /* sem storage */ }
+        if (tema !== 'claro' && tema !== 'escuro') {
+          tema = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'escuro'
+            : 'claro';
+        }
+        document.documentElement.dataset.tema = tema;
+        var barra = document.querySelector('meta[name="theme-color"]');
+        if (barra) barra.content = tema === 'escuro' ? '#04070b' : '#ffffff';
+      })();
+    </script>
 
     <!-- Instalação na tela inicial -->
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -14,7 +31,7 @@
     <meta name="apple-mobile-web-app-title" content="NewPay CRM" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>NewPay CRM — Calendário</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23101935'/><text y='68' x='50' text-anchor='middle' font-size='54' font-family='system-ui' font-weight='700' fill='%2334d399'>N</text></svg>" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2304070b'/><text y='68' x='50' text-anchor='middle' font-size='54' font-family='system-ui' font-weight='800' fill='%23e6712d'>N</text></svg>" />
   </head>
   <body>
     <div id="root"></div>

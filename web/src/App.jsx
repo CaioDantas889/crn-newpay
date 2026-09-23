@@ -36,10 +36,15 @@ export default function App() {
 
   if (carregando) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--navy-900)', color: '#fff' }}>
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--preto)', color: '#fff' }}>
         <div className="centro">
-          <div className="logo-mark" style={{ margin: '0 auto 12px', width: 46, height: 46, fontSize: '1.3rem' }}>N</div>
-          <p className="mini" style={{ color: '#93a4c8' }}>Carregando seu CRM...</p>
+          <div
+            className="logo-npb sobre-preto"
+            role="img"
+            aria-label="NewPay Bank"
+            style={{ margin: '0 auto 14px', width: 132, height: 93 }}
+          />
+          <p className="mini" style={{ color: '#aeb8c2' }}>Carregando seu CRM...</p>
         </div>
       </div>
     );

@@ -6,6 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'reac
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { dateKey, moeda } from '../lib/date.js';
+import { aplicarTema, outroTema, temaPreferido } from '../lib/tema.js';
 import { Avatar, Vazio } from './ui.jsx';
 import NotificacoesPainel from './NotificacoesPainel.jsx';
 import RegistrarVisita from './RegistrarVisita.jsx';
@@ -25,6 +26,7 @@ export default function AppShell() {
   const [menuNovo, setMenuNovo] = useState(false);
   const [modal, setModal] = useState(null); // 'visita' | 'cliente' | 'compromisso'
   const [busca, setBusca] = useState('');
+  const [tema, setTema] = useState(temaPreferido);
   const [resultados, setResultados] = useState(null);
   const caixaBusca = useRef(null);
 
@@ -75,7 +77,7 @@ export default function AppShell() {
   return (
     <div className="app">
       <aside className="rail">
-        <div className="marca" title="NewPay CRM">N</div>
+        <div className="marca logo-npb" role="img" aria-label="NewPay Bank" title="NewPay CRM" />
 
         <NavLink to="/" end className={railClasse}>
           <span className="ico">🏠</span> Início
@@ -182,6 +184,14 @@ export default function AppShell() {
           </div>
 
           <div className="direita">
+            <button
+              className="btn btn-ghost btn-icone"
+              onClick={() => setTema((atual) => aplicarTema(outroTema(atual)))}
+              title={tema === 'escuro' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+              aria-label={tema === 'escuro' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+            >
+              {tema === 'escuro' ? '☀️' : '🌙'}
+            </button>
             <button
               className="btn btn-ghost btn-icone sino"
               onClick={() => setPainelAberto((v) => !v)}

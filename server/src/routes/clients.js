@@ -5,12 +5,12 @@ import { find, id, insert, logActivity, remove, table, update } from '../store.j
 import { isManager, requireAuth } from '../auth.js';
 import {
   FUNIL, RESULTADOS_VISITA, RETURN_PRESETS, SEGMENTOS,
-  calcularScore, temperaturaPorScore,
+  avaliarVisita, calcularScore, temperaturaPorScore,
 } from '../domain.js';
 import { expandEvent, userCard } from '../serializers.js';
 import { haversine } from '../lib/geo.js';
 import { removerAnexosDaVisita } from '../lib/uploads.js';
-import { addDays, atHour, daysBetween } from '../lib/dates.js';
+import { addDays, atHour, dateKey, daysBetween, endOfDay, startOfDay } from '../lib/dates.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -47,6 +47,89 @@ router.get('/', (req, res) => {
   lista.sort(ordenacoes[ordem] ?? ordenacoes.score);
 
   res.json(lista);
+});
+
+/**
+ * GET /api/clients/sugestoes?data=YYYY-MM-DD — quem visitar naquele dia.
+ *
+ * Existe para resolver a folha em branco: o vendedor abre a agenda do dia e o
+ * CRM ja diz quem vale a pena, com o motivo do lado. Quem ja esta marcado no
+ * dia fica de fora — sugerir o que ja esta na agenda e ruido.
+ */
+router.get('/sugestoes', (req, res) => {
+  const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
+  const limite = Math.min(Math.max(Number(req.query.limite) || 6, 1), 20);
+
+  const base = req.query.data ? new Date(`${req.query.data}T12:00:00`) : new Date();
+  if (Number.isNaN(base.getTime())) return res.status(400).json({ error: 'Data inválida.' });
+
+  const ini = startOfDay(base);
+  const fim = endOfDay(base);
+  const dentro = (d) => d && new Date(d) >= ini && new Date(d) <= fim;
+
+  const carteira = table('clients').filter((c) => c.ownerId === alvo);
+  const porId = new Map(carteira.map((c) => [c.id, c]));
+
+  const doDia = table('events').filter(
+    (e) => e.ownerId === alvo && e.status !== 'cancelado' && dentro(e.start)
+  );
+  const jaNaAgenda = new Set(doDia.map((e) => e.clientId).filter(Boolean));
+
+  // Cidades que o dia ja leva o vendedor: vira desconto de estrada na nota
+  const cidadesDoDia = [
+    ...new Set(doDia.map((e) => porId.get(e.clientId)?.city).filter(Boolean)),
+  ];
+
+  // Retorno prometido que venceu (ou vence no proprio dia) e nao foi realizado
+  const followupsAbertos = new Set(
+    table('events')
+      .filter(
+        (e) =>
+          e.ownerId === alvo &&
+          e.type === 'followup' &&
+          e.status === 'agendado' &&
+          new Date(e.start) <= fim
+      )
+      .map((e) => e.clientId)
+      .filter(Boolean)
+  );
+
+  const sugestoes = carteira
+    .filter((c) => c.stage !== 'perdido' && !jaNaAgenda.has(c.id))
+    .map((c) => {
+      const diasSemContato = daysBetween(c.lastContactAt);
+      const { pontos, motivos } = avaliarVisita(c, {
+        diasSemContato,
+        followupVencido: followupsAbertos.has(c.id),
+        cidadesDoDia,
+      });
+      return {
+        id: c.id,
+        company: c.company,
+        name: c.name,
+        city: c.city,
+        address: c.address,
+        phone: c.phone,
+        whatsapp: c.whatsapp,
+        score: c.score,
+        temperature: c.temperature,
+        stage: c.stage,
+        stageMeta: FUNIL[c.stage] ?? FUNIL.novo,
+        segmentoLabel: SEGMENTOS[c.segment] ?? c.segment,
+        diasSemContato,
+        pontos,
+        motivos,
+      };
+    })
+    .sort((a, b) => b.pontos - a.pontos || b.score - a.score)
+    .slice(0, limite);
+
+  res.json({
+    data: dateKey(base),
+    naAgenda: jaNaAgenda.size,
+    cidadesDoDia,
+    sugestoes,
+  });
 });
 
 /** GET /api/clients/mapa?raio=3 — "Você tem 12 leads a menos de 3 km" */

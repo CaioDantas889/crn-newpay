@@ -88,6 +88,7 @@ export const endpoints = {
 
   // carteira
   clientes: (params) => api.get(`/clients${qs(params)}`),
+  sugestoesDoDia: (data) => api.get(`/clients/sugestoes${qs({ data })}`),
   cliente: (id) => api.get(`/clients/${id}`),
   criarCliente: (dados) => api.post('/clients', dados),
   atualizarCliente: (id, patch) => api.patch(`/clients/${id}`, patch),

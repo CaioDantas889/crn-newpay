@@ -112,7 +112,7 @@ export default function MapaClientes() {
         <span><i style={{ background: '#f59e0b' }} /> Lead morno</span>
         <span><i style={{ background: '#3b82f6' }} /> Lead frio</span>
         <span><i style={{ background: '#0d9488' }} /> Cliente ativo</span>
-        <span><i style={{ background: '#0f172a' }} /> Sua base</span>
+        <span><i style={{ background: 'var(--acao)' }} /> Sua base</span>
       </div>
 
       {selecionado && (

@@ -4,6 +4,7 @@ import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { addDays, dateKey, diaExtenso, hora, isToday, parseKey } from '../lib/date.js';
 import { Carregando, Progresso, Stat, Vazio } from '../components/ui.jsx';
+import SugestoesDoDia from '../components/SugestoesDoDia.jsx';
 import EventoCard from '../components/EventoCard.jsx';
 import EventoModal from '../components/EventoModal.jsx';
 
@@ -31,6 +32,40 @@ export default function AgendaDia() {
     await endpoints.atualizarTarefa(t.id, { done: !t.done });
     recarregar();
     recarregarNotificacoes();
+  };
+
+  /**
+   * Primeira hora cheia livre do dia, entre 8h e 18h. E o que faz o "Agendar"
+   * das sugestoes ser um toque so: ninguem precisa escolher horario para
+   * marcar uma visita que vai acontecer "de manha".
+   */
+  const proximoHorarioLivre = () => {
+    const ocupado = eventos
+      .filter((e) => e.status !== 'cancelado')
+      .map((e) => [new Date(e.start).getTime(), new Date(e.end).getTime()]);
+
+    for (let h = 8; h <= 17; h++) {
+      const inicio = new Date(`${chave}T${String(h).padStart(2, '0')}:00:00`);
+      const fim = new Date(inicio.getTime() + 60 * 60000);
+      if (isToday(dia) && inicio < agora) continue;
+      const livre = !ocupado.some(([de, ate]) => inicio.getTime() < ate && fim.getTime() > de);
+      if (livre) return inicio;
+    }
+    return new Date(`${chave}T18:00:00`);
+  };
+
+  const agendarVisita = async (cliente) => {
+    const inicio = proximoHorarioLivre();
+    await endpoints.criarEvento({
+      title: `Visita ${cliente.company}`,
+      type: 'visita',
+      start: inicio.toISOString(),
+      end: new Date(inicio.getTime() + 60 * 60000).toISOString(),
+      clientId: cliente.id,
+      location: [cliente.address, cliente.city].filter(Boolean).join(' — '),
+    });
+    toast(`${cliente.company} na agenda às ${hora(inicio)}.`);
+    recarregar();
   };
 
   const criarTarefa = async (e) => {
@@ -139,6 +174,13 @@ export default function AgendaDia() {
         </div>
 
         <div className="coluna">
+          <SugestoesDoDia
+            data={chave}
+            hoje={isToday(dia)}
+            passado={chave < dateKey()}
+            onAgendar={agendarVisita}
+          />
+
           <div className="card">
             <div className="card-header">
               <h2>Tarefas do dia</h2>

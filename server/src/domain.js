@@ -177,6 +177,58 @@ export const FUNIL = {
 
 export const FUNIL_ATIVO = ['novo', 'contatado', 'proposta', 'negociacao', 'fechado'];
 
+/**
+ * Quem vale a pena visitar num dia. Cruza o que o CRM já sabe: oportunidade,
+ * tempo sem contato, retorno prometido e a rota que o dia já tem.
+ *
+ * Devolve os pontos e, principalmente, os motivos — sugestao sem porque o
+ * vendedor nao segue, e com razao: ele conhece a rua, o sistema nao.
+ *
+ * E aqui que se ajusta o peso de cada sinal.
+ */
+export function avaliarVisita(cliente, { diasSemContato = 0, followupVencido = false, cidadesDoDia = [] } = {}) {
+  const motivos = [];
+  let pontos = 0;
+
+  // Oportunidade: metade da nota do diagnostico
+  const score = Number(cliente.score) || 0;
+  pontos += score * 0.5;
+  if (score >= 70) motivos.push(`oportunidade ${score}`);
+
+  // Retorno prometido e nao cumprido e o sinal mais forte que existe
+  if (followupVencido) {
+    pontos += 30;
+    motivos.push('follow-up vencido');
+  }
+
+  // Esfriando: cada dia sem contato pesa, ate um mes
+  if (diasSemContato >= 7) {
+    pontos += Math.min(diasSemContato, 30) * 1.2;
+    motivos.push(`${diasSemContato} dias sem contato`);
+  }
+
+  if (cliente.temperature === 'quente') {
+    pontos += 12;
+    motivos.push('lead quente');
+  } else if (cliente.temperature === 'morno') {
+    pontos += 5;
+  }
+
+  if (cliente.stage === 'proposta' || cliente.stage === 'negociacao') {
+    pontos += 10;
+    motivos.push(`${FUNIL[cliente.stage].label.toLowerCase()} em aberto`);
+  }
+
+  // Rota: se o dia ja leva o vendedor aquela cidade, o custo da visita e quase
+  // zero. E o sinal que economiza estrada.
+  if (cliente.city && cidadesDoDia.includes(cliente.city)) {
+    pontos += 14;
+    motivos.push(`ja vai a ${cliente.city}`);
+  }
+
+  return { pontos: Math.round(pontos), motivos };
+}
+
 /* --------------------------------------------------------------- visitas */
 
 export const RESULTADOS_VISITA = {

@@ -57,6 +57,11 @@ export default function Mais() {
         <button className="btn btn-danger btn-block" onClick={sair}>Sair da conta</button>
       </div>
 
+      <div className="assinatura">
+        <div className="logo-npb" role="img" aria-label="NewPay Bank" />
+        <span className="mini">CRM de vendas externas</span>
+      </div>
+
       {trocandoSenha && <TrocarSenha onFechar={() => setTrocandoSenha(false)} />}
     </div>
   );

@@ -321,7 +321,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
           </div>
 
           {resultado === 'fechado' && (
-            <div className="card card-pad coluna" style={{ background: '#f0fdf9', borderColor: '#a7f3d0' }}>
+            <div className="card card-pad coluna" style={{ background: 'var(--ok-bg)', borderColor: 'var(--ok-line)' }}>
               <b>Dados da venda</b>
               <div className="form-linha duas">
                 <div className="campo">

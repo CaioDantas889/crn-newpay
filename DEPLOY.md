@@ -159,3 +159,4 @@ container tem verificação própria a cada 30 segundos.
 - Roda como usuário `node`, não como root.
 - `HEALTHCHECK` embutido, para o Docker reiniciar sozinho se o processo travar.
 - `restart: unless-stopped`: volta depois de reiniciar a máquina.
+ 

@@ -57,7 +57,7 @@ export default function Inicio() {
       {/* --------------------------------------------------- meta do mês */}
       <div className="card-meta">
         <div className="entre">
-          <span className="selo" style={{ color: '#a5b4d4' }}>Meta do mês</span>
+          <span className="selo" style={{ color: 'rgba(255, 255, 255, 0.55)' }}>Meta do mês</span>
           <span className="chip-nivel" style={{ background: resumo.nivel.cor }}>
             {resumo.nivel.emoji} {resumo.nivel.label}
           </span>
@@ -71,7 +71,7 @@ export default function Inicio() {
         <Progresso
           atual={resumo.maquinasAtivadas}
           total={resumo.meta.metaMaquinas}
-          cor={resumo.percentualMeta >= 100 ? '#34d399' : '#fbbf24'}
+          cor={resumo.percentualMeta >= 100 ? '#34d399' : 'var(--laranja-forte)'}
         />
 
         <div className="meta-linha">

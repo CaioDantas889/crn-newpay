@@ -226,7 +226,7 @@ export default function PainelGestor() {
                 <div className="card-header"><h2>Vendas por cidade</h2></div>
                 {ind.porCidade.slice(0, 8).map((c) => (
                   <div key={c.chave} className="cliente-linha">
-                    <span className="avatar" style={{ background: 'var(--navy-700)' }}>{c.maquinas}</span>
+                    <span className="avatar" style={{ background: 'var(--slate)' }}>{c.maquinas}</span>
                     <div className="info">
                       <b>{c.chave}</b>
                       <div className="mini">{c.vendas} venda(s) · {c.maquinas} máquina(s)</div>

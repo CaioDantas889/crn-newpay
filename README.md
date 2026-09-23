@@ -122,6 +122,11 @@ falhar em silêncio.
   alguns), com confirmação de presença obrigatória
 - **Agendar retorno** dentro da oportunidade: amanhã, 3 dias, 7 dias ou data
   personalizada
+- **Quem visitar**: ao lado da agenda do dia, o CRM sugere os clientes que
+  estão pedindo visita, com o motivo escrito do lado — "follow-up vencido",
+  "23 dias sem contato", "proposta em aberto", "já vai a Icó". Um toque em
+  **📅 Agendar** joga o cliente na primeira hora livre do dia, com endereço e
+  telefone já preenchidos. Quem já está marcado naquele dia não aparece
 - **Tarefas e lembretes** pessoais, com prazo e conclusão
 
 ### Central de notificações
@@ -400,10 +405,57 @@ Tudo que é regra de negócio está em **`server/src/domain.js`**:
 | Pesos da pontuação de oportunidade | `calcularScore` / `INTERESSES` |
 | Segmentos, máquinas, faturamento, dores | `SEGMENTOS`, `MAQUINAS`, `FATURAMENTOS`, `DORES` |
 | Etapas do funil | `FUNIL` |
+| Peso de cada sinal na sugestão de visita | `avaliarVisita` |
 | Cores e tipos do calendário | `EVENT_TYPES` |
 
 Metas mensais por vendedor ficam na tabela `goals` (definidas no seed em
 `server/src/seed.js`).
+
+---
+
+## Identidade visual e temas
+
+A interface usa a marca da NewPay: o laranja `#e6712d` (o dos botões e do
+"NewPay" no site), o `#ff6b00` como realce, e o preto `#04070b` do hero. Tudo
+isso vive em **`web/src/styles/base.css`**, no bloco de tokens — mudar a cor da
+marca é trocar duas linhas, e o app inteiro acompanha.
+
+| O que | Token |
+| --- | --- |
+| Laranja da marca / realce | `--laranja`, `--laranja-forte` |
+| Fundos e bordas | `--bg`, `--surface`, `--surface-2`, `--line` |
+| Texto | `--text`, `--text-2`, `--text-3` |
+| Moldura (rail, topbar, barra de baixo) | `--chrome*` |
+| Ação forte (salvar, confirmar) | `--acao`, `--acao-text` |
+| Estados (ok, erro, alerta, info) | `--ok-*`, `--erro-*`, `--alerta-*`, `--info-*` |
+
+**Claro e escuro** são o mesmo conjunto de tokens redefinido em
+`:root[data-tema="escuro"]`. Quem decide é o atributo `data-tema` do `<html>`:
+
+- na primeira pintura, o script inline do `web/index.html` lê o que foi salvo
+  no aparelho ou, na falta, o que o sistema prefere — sem isso a tela pisca
+  branca antes do React montar;
+- o botão ☀️/🌙 da topbar troca em uso (`web/src/lib/tema.js`) e grava a
+  escolha no próprio aparelho: o vendedor usa o claro no sol da rua e o escuro
+  ao fechar o dia, sem mexer no cadastro;
+- `color-scheme` acompanha, então calendário, relógio e barra de rolagem
+  nativos do celular vêm escuros também.
+
+**O logotipo** oficial fica em `web/public/`, em duas artes:
+
+| Arquivo | Onde vale |
+| --- | --- |
+| `logo-npb.png` | fundos claros (a arte original, com o "p" preto) |
+| `logo-npb-escuro.png` | fundos escuros — o mesmo desenho com o "p" claro, senão ele some no preto |
+
+Quem escolhe entre as duas é o CSS, pela classe `.logo-npb` e pelo tema; a
+variante `.sobre-preto` força a clara onde o fundo é preto nos dois temas
+(abertura e login). Ele aparece em cinco lugares: **abertura** do app,
+**login** (na vitrine no computador, em cima do cartão no celular), **rail**
+do computador, pé do menu **Mais** e o **ícone do app instalado** — este
+gerado por `npm --prefix web run icones`, que lê o próprio `logo-npb.png` e
+monta os quatro PNGs (Android, maskable e iPhone). Trocou o logotipo? Ponha os
+dois arquivos no lugar e rode esse comando.
 
 ---
 

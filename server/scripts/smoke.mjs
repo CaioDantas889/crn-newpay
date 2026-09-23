@@ -149,6 +149,46 @@ const mapa = await api('/api/clients/mapa?raio=3', { token: vendedor });
 ok(mapa.json?.destaque?.includes('km'), 'mapa de clientes', mapa.json?.destaque);
 ok(mapa.json?.pontos?.every((p) => typeof p.distanciaKm === 'number'), 'pontos trazem distância');
 
+// Sugestao de quem visitar: o que preenche a agenda do dia
+const sugestoes = await api(`/api/clients/sugestoes?data=${hoje}`, { token: vendedor });
+ok(Array.isArray(sugestoes.json?.sugestoes), 'sugestoes de visita do dia', `${sugestoes.json?.sugestoes?.length} cliente(s)`);
+ok(
+  sugestoes.json.sugestoes.every((s) => Array.isArray(s.motivos) && typeof s.pontos === 'number'),
+  'cada sugestao vem com pontos e motivo'
+);
+ok(
+  sugestoes.json.sugestoes.every((s, i, lista) => i === 0 || lista[i - 1].pontos >= s.pontos),
+  'sugestoes vem da mais forte para a mais fraca'
+);
+ok(
+  sugestoes.json.sugestoes.every((s) => s.stage !== 'perdido'),
+  'cliente perdido nao entra na sugestao'
+);
+ok((await api('/api/clients/sugestoes?data=ontem', { token: vendedor })).status === 400, 'data invalida recusada');
+
+// Quem ja esta marcado no dia sai da lista: sugestao nao repete a agenda
+const alvoSugerido = sugestoes.json.sugestoes[0];
+if (alvoSugerido) {
+  const marcado = await api('/api/events', {
+    token: vendedor,
+    method: 'POST',
+    body: {
+      title: `Visita ${alvoSugerido.company}`,
+      type: 'visita',
+      start: `${hoje}T16:00:00`,
+      clientId: alvoSugerido.id,
+    },
+  });
+  const depois = await api(`/api/clients/sugestoes?data=${hoje}`, { token: vendedor });
+  ok(
+    !depois.json.sugestoes.some((s) => s.id === alvoSugerido.id),
+    'cliente ja agendado no dia sai da sugestao',
+    alvoSugerido.company
+  );
+  ok(depois.json.naAgenda > sugestoes.json.naAgenda, 'a contagem de agendados acompanha');
+  await api(`/api/events/${marcado.json.id}`, { token: vendedor, method: 'DELETE' });
+}
+
 /* -------------------------------------------------------- registro de visita */
 secao('Registro de visita');
 

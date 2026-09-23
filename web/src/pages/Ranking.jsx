@@ -26,7 +26,7 @@ export default function Ranking() {
       {minhaPosicao && (
         <div className="card-meta">
           <div className="entre">
-            <span className="selo" style={{ color: '#a5b4d4' }}>Sua posição</span>
+            <span className="selo" style={{ color: 'rgba(255, 255, 255, 0.55)' }}>Sua posição</span>
             <span className="chip-nivel" style={{ background: minhaPosicao.nivel.cor }}>
               {minhaPosicao.nivel.emoji} {minhaPosicao.nivel.label}
             </span>

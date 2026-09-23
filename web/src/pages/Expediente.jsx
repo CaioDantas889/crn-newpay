@@ -4,8 +4,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
-import { duracao } from '../lib/date.js';
-import { Carregando, Vazio } from '../components/ui.jsx';
+import { addDays, dateKey, duracao } from '../lib/date.js';
+import { Carregando, Stat, Vazio } from '../components/ui.jsx';
+
+const DIAS_NO_HISTORICO = 14;
 
 const hora = (iso) =>
   iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
@@ -43,7 +45,7 @@ function posicaoAtual() {
 
 export default function Expediente() {
   const { toast } = useApp();
-  const { dados, carregando, recarregar } = useRecurso(() => endpoints.jornada({ dias: 14 }), []);
+  const { dados, carregando, recarregar } = useRecurso(() => endpoints.jornada({ dias: DIAS_NO_HISTORICO }), []);
   const [batendo, setBatendo] = useState(false);
   const [agora, setAgora] = useState(Date.now());
 
@@ -89,10 +91,12 @@ export default function Expediente() {
     ? Math.max(0, Math.round((agora - new Date(aberta.inicioAt)) / 60000))
     : dados.minutosHoje;
 
-  const semana = dados.historico.filter((j) => !j.emAndamento);
-  const mediaDia = semana.length
-    ? Math.round(semana.reduce((s, j) => s + j.duracaoMin, 0) / semana.length)
+  const encerradas = dados.historico.filter((j) => !j.emAndamento);
+  const diasTrabalhados = new Set(encerradas.map((j) => j.data)).size;
+  const mediaDia = diasTrabalhados
+    ? Math.round(encerradas.reduce((s, j) => s + j.duracaoMin, 0) / diasTrabalhados)
     : 0;
+  const ultimaSaida = encerradas.find((j) => j.fimAt);
 
   return (
     <div className="page">
@@ -102,70 +106,151 @@ export default function Expediente() {
       </div>
 
       <div className={`card card-pad expediente${aberta ? ' aberto' : ''}`}>
-        <div className="expediente-estado">
-          <span className="selo">{aberta ? 'Em campo desde' : 'Hoje'}</span>
-          <b className="expediente-relogio">
-            {aberta ? hora(aberta.inicioAt) : dados.hoje ? duracao(dados.minutosHoje) : '--:--'}
-          </b>
-          <span className="mini">
-            {aberta
-              ? `${duracao(minutosAgora)} trabalhados até agora`
-              : dados.hoje
-                ? `Começou ${hora(dados.hoje.inicioAt)} e encerrou ${hora(dados.hoje.fimAt)}`
-                : 'Expediente ainda não iniciado.'}
-          </span>
-        </div>
+        <div className="expediente-topo">
+          <div className="expediente-estado">
+            <span className="selo">{aberta ? 'Em campo desde' : 'Hoje'}</span>
+            <b className="expediente-relogio">
+              {aberta ? hora(aberta.inicioAt) : dados.hoje ? duracao(dados.minutosHoje) : '--:--'}
+            </b>
+            <span className="mini">
+              {aberta
+                ? `${duracao(minutosAgora)} trabalhados até agora`
+                : dados.hoje
+                  ? `Começou ${hora(dados.hoje.inicioAt)} e encerrou ${hora(dados.hoje.fimAt)}`
+                  : 'Expediente ainda não iniciado.'}
+            </span>
+          </div>
 
-        <button
-          className={`btn btn-block ${aberta ? 'btn-danger' : 'btn-brand'}`}
-          style={{ minHeight: 52, fontSize: '1rem' }}
-          disabled={batendo}
-          onClick={() => bater(aberta ? 'saida' : 'entrada')}
-        >
-          {batendo
-            ? '📍 Pegando sua localização...'
-            : aberta
-              ? '⏹ Encerrar expediente'
-              : '▶️ Iniciar expediente'}
-        </button>
+          <button
+            className={`btn expediente-acao ${aberta ? 'btn-danger' : 'btn-brand'}`}
+            disabled={batendo}
+            onClick={() => bater(aberta ? 'saida' : 'entrada')}
+          >
+            {batendo
+              ? '📍 Pegando o local...'
+              : aberta
+                ? '⏹ Encerrar expediente'
+                : '▶️ Iniciar expediente'}
+          </button>
+        </div>
 
         {aberta && <Local rotulo="Entrada registrada" local={aberta.inicioLocal} endereco={aberta.inicioEndereco} />}
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div className="crescer">
-            <h2>Últimos dias</h2>
-            <p className="mini">
-              {semana.length
-                ? `${semana.length} dia(s) registrados · média de ${duracao(mediaDia)} por dia`
-                : 'Nenhum dia encerrado ainda.'}
-            </p>
+      <div className="grid grid-4">
+        <Stat
+          rotulo={aberta ? 'Em campo hoje' : 'Horas hoje'}
+          valor={duracao(minutosAgora)}
+          destaque
+          extra={aberta ? 'Contando agora' : dados.hoje ? 'Dia encerrado' : 'Nada registrado hoje'}
+        />
+        <Stat
+          rotulo="Média por dia"
+          valor={duracao(mediaDia)}
+          cor="var(--blue)"
+          extra={`${diasTrabalhados} dia(s) trabalhado(s)`}
+        />
+        <Stat
+          rotulo={`Total em ${DIAS_NO_HISTORICO} dias`}
+          valor={duracao(dados.totalMinutos)}
+          extra="Soma do período"
+        />
+        <Stat
+          rotulo="Última saída"
+          valor={hora(ultimaSaida?.fimAt)}
+          extra={ultimaSaida ? dia(ultimaSaida.data) : 'Nenhuma ainda'}
+        />
+      </div>
+
+      <div className="layout-expediente">
+        <div className="card">
+          <div className="card-header">
+            <div className="crescer">
+              <h2>Últimos {DIAS_NO_HISTORICO} dias</h2>
+              <p className="mini">Cada barra é um dia em campo. A linha marca as 8 horas.</p>
+            </div>
+          </div>
+          <div className="card-pad">
+            <GraficoDias historico={dados.historico} />
           </div>
         </div>
 
-        {dados.historico.length === 0 ? (
-          <Vazio emoji="⏱️" titulo="Nenhum expediente registrado" texto="O primeiro começa no botão acima." />
-        ) : (
-          dados.historico.map((j) => (
-            <div key={j.id} className="cliente-linha">
-              <span className="avatar" style={{ background: j.emAndamento ? 'var(--brand)' : 'var(--navy-700)' }}>
-                {j.emAndamento ? '▶' : duracao(j.duracaoMin).replace('h', '')}
-              </span>
-              <div className="info">
-                <b>{dia(j.data)}</b>
-                <div className="mini">
-                  {hora(j.inicioAt)} às {j.fimAt ? hora(j.fimAt) : 'agora'}
-                  {j.revisar ? ' · ⚠️ revisar' : ''}
-                  {j.justificativa ? ` · corrigido: ${j.justificativa}` : ''}
-                </div>
-                <Local rotulo="Entrada" local={j.inicioLocal} endereco={j.inicioEndereco} compacto />
-              </div>
-              <span className="chip">{j.emAndamento ? 'em campo' : duracao(j.duracaoMin)}</span>
+        <div className="card">
+          <div className="card-header">
+            <div className="crescer">
+              <h2>Dias registrados</h2>
+              <p className="mini">
+                {encerradas.length
+                  ? `${encerradas.length} batida(s) encerrada(s) no período`
+                  : 'Nenhum dia encerrado ainda.'}
+              </p>
             </div>
-          ))
-        )}
+          </div>
+
+          {dados.historico.length === 0 ? (
+            <Vazio emoji="⏱️" titulo="Nenhum expediente registrado" texto="O primeiro começa no botão acima." />
+          ) : (
+            <div className="lista-rolagem">
+              {dados.historico.map((j) => (
+                <div key={j.id} className="cliente-linha">
+                  <span className="avatar" style={{ background: j.emAndamento ? 'var(--brand)' : 'var(--slate)' }}>
+                    {j.emAndamento ? '▶' : `${Math.round(j.duracaoMin / 60)}h`}
+                  </span>
+                  <div className="info">
+                    <b>{dia(j.data)}</b>
+                    <div className="mini">
+                      {hora(j.inicioAt)} às {j.fimAt ? hora(j.fimAt) : 'agora'}
+                      {j.revisar ? ' · ⚠️ revisar' : ''}
+                      {j.lancadoPor ? ' · lançado pela gestão' : ''}
+                      {j.justificativa ? ` · ${j.justificativa}` : ''}
+                    </div>
+                    <Local rotulo="Entrada" local={j.inicioLocal} endereco={j.inicioEndereco} compacto />
+                  </div>
+                  <span className="chip">{j.emAndamento ? 'em campo' : duracao(j.duracaoMin)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- gráfico -- */
+
+const JORNADA_CHEIA = 8 * 60; // a referência do dia, em minutos
+const pct = (fracao) => (Math.min(1, fracao) * 100).toFixed(1) + '%';
+
+/**
+ * Uma barra por dia do período, do mais antigo ao mais novo. Dia sem batida
+ * aparece como barra vazia — é assim que o buraco na semana fica visível.
+ */
+function GraficoDias({ historico }) {
+  const hoje = new Date();
+  const porDia = new Map();
+  for (const j of historico) {
+    porDia.set(j.data, (porDia.get(j.data) ?? 0) + j.duracaoMin);
+  }
+
+  const dias = Array.from({ length: DIAS_NO_HISTORICO }, (_, i) => {
+    const data = dateKey(addDays(hoje, i - (DIAS_NO_HISTORICO - 1)));
+    return { data, minutos: porDia.get(data) ?? 0 };
+  });
+
+  // Folga em cima para a marca das 8 horas nunca encostar no teto do trilho
+  const teto = Math.max(JORNADA_CHEIA * 1.15, ...dias.map((d) => d.minutos));
+
+  return (
+    <div className="jornada-grafico" style={{ '--linha-cheia': pct(JORNADA_CHEIA / teto) }}>
+      {dias.map((d) => (
+        <div key={d.data} className="jornada-dia" title={dia(d.data) + ': ' + duracao(d.minutos)}>
+          <div className="trilho">
+            {d.minutos > 0 && <span style={{ height: pct(d.minutos / teto) }} />}
+          </div>
+          <small>{d.data.slice(8)}</small>
+        </div>
+      ))}
     </div>
   );
 }

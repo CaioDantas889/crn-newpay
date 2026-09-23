@@ -45,14 +45,9 @@ export default function Login() {
   return (
     <div className="login">
       <div className="login-vitrine">
-        <div className="logo" style={{ padding: 0 }}>
-          <span className="logo-mark">N</span>
-          <span style={{ color: '#fff', fontWeight: 700 }}>
-            NewPay CRM
-            <small style={{ display: 'block', color: '#7f8db0', fontWeight: 500, fontSize: '0.7rem' }}>
-              Módulo Calendário
-            </small>
-          </span>
+        <div>
+          <div className="logo-npb sobre-preto login-marca" role="img" aria-label="NewPay Bank" />
+          <p className="selo" style={{ color: '#aeb8c2', marginTop: 10 }}>CRM · Vendas externas</p>
         </div>
 
         <h2>A central de comando diária do vendedor externo.</h2>
@@ -68,6 +63,8 @@ export default function Login() {
       </div>
 
       <div className="login-painel">
+        <div className="logo-npb sobre-preto login-marca-celular" role="img" aria-label="NewPay Bank" />
+
         <form className="login-card" onSubmit={enviar}>
           <h1>Entrar</h1>
           <p className="mini" style={{ marginBottom: 18 }}>Acesse sua agenda NewPay.</p>
@@ -95,7 +92,7 @@ export default function Login() {
                 autoComplete="current-password"
               />
             </div>
-            <button className="btn btn-primary btn-block" disabled={entrando}>
+            <button className="btn btn-brand btn-block" disabled={entrando}>
               {entrando ? 'Entrando...' : 'Entrar'}
             </button>
           </div>
