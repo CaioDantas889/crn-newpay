@@ -76,7 +76,7 @@ export default function Objecoes() {
             <div className="card-pad coluna">
               <div className="objecao-resposta">{o.resposta}</div>
               <div className="linha" style={{ flexWrap: 'wrap' }}>
-                <button className="btn btn-primary btn-sm" onClick={() => copiar(o.resposta)}>📋 Copiar resposta</button>
+                <button className="btn btn-primary btn-sm" onClick={() => copiar(o.resposta)}>▤ Copiar resposta</button>
                 {dados.cliente && (
                   <a
                     className="btn btn-sm"
@@ -84,7 +84,7 @@ export default function Objecoes() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    💬 Enviar no WhatsApp
+                    ✉︎ Enviar no WhatsApp
                   </a>
                 )}
               </div>

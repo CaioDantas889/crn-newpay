@@ -30,7 +30,7 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape }) {
   );
 }
 
-export const Vazio = ({ emoji = '📭', titulo, texto, acao }) => (
+export const Vazio = ({ emoji = '◌', titulo, texto, acao }) => (
   <div className="vazio">
     <span className="emoji">{emoji}</span>
     <p className="forte">{titulo}</p>
@@ -69,7 +69,7 @@ export const Avatar = ({ nome = '?', cor = '#334155', pequeno }) => (
 
 export const ChipTemperatura = ({ valor }) => (
   <span className={`chip chip-${valor}`}>
-    {valor === 'quente' ? '🔥' : valor === 'morno' ? '🌤️' : '❄️'} {valor}
+    {valor === 'quente' ? '▲' : valor === 'morno' ? '●' : '○'} {valor}
   </span>
 );
 

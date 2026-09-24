@@ -114,8 +114,8 @@ sem microfone, em uso por outro programa, ou endereço sem HTTPS) em vez de
 falhar em silêncio.
 
 ### Calendário (módulo integrado)
-- **Visão mensal** com cores por tipo: 🔵 visita · 🟢 cliente interessado ·
-  🟡 follow-up · 🟣 treinamento · 🔴 reunião obrigatória · ⚫ aviso da diretoria
+- **Visão mensal** com uma cor por tipo: visita, cliente interessado,
+  follow-up, treinamento, reunião obrigatória e aviso da diretoria
 - **Visão diária** em timeline, com marcador de "agora", check-in dos
   compromissos e tarefas do dia
 - **Agenda corporativa**: o gestor cria eventos para toda a equipe (ou para
@@ -125,7 +125,7 @@ falhar em silêncio.
 - **Quem visitar**: ao lado da agenda do dia, o CRM sugere os clientes que
   estão pedindo visita, com o motivo escrito do lado — "follow-up vencido",
   "23 dias sem contato", "proposta em aberto", "já vai a Icó". Um toque em
-  **📅 Agendar** joga o cliente na primeira hora livre do dia, com endereço e
+  **▤ Agendar** joga o cliente na primeira hora livre do dia, com endereço e
   telefone já preenchidos. Quem já está marcado naquele dia não aparece
 - **Tarefas e lembretes** pessoais, com prazo e conclusão
 
@@ -137,7 +137,7 @@ gestor: vendedor sem agenda e comunicado sem leitura.
 
 ### Mural de avisos
 Comunicados da diretoria com prioridade e categoria. O vendedor marca
-**"✅ Li o comunicado"** e o gestor vê exatamente quem leu e quem não leu.
+**"✓ Li o comunicado"** e o gestor vê exatamente quem leu e quem não leu.
 
 ### Biblioteca comercial e central de objeções
 Vídeos e PDFs oficiais (abordagem, demonstração, tabela de taxas, comparativo,
@@ -149,14 +149,14 @@ por mês e por ano. Dá para copiar ou mandar no WhatsApp.
   fica no diretório de dados junto com os anexos de visita
 - Aceita **vídeo e áudio** também: o arquivo sobe em binário puro (até 64 MB) e
   fica no diretório de dados, junto com os anexos de visita
-- Todo mundo tem o botão **📲 Enviar**, que abre o WhatsApp com o link do
+- Todo mundo tem o botão **⇩︎ Enviar**, que abre o WhatsApp com o link do
   material pronto para mandar ao lojista
 - Apagar o material apaga o arquivo do servidor junto; vendedor só consome
 - As objeções continuam com resposta e dicas, sem simulação de economia
 
 ### Ranking gamificado
 Pódio, classificação por ativações, conversão e % da meta, com os
-níveis 🥉 Bronze · 🥈 Prata · 🥇 Ouro · 💎 Diamante · 👑 Elite NewPay.
+níveis ◔ Bronze · ◑ Prata · ◕ Ouro · ◆ Diamante · ★ Elite NewPay.
 
 ### KPI diário obrigatório
 Fechamento do dia com os 5 números: visitas realizadas, novos leads, propostas
@@ -435,11 +435,24 @@ marca é trocar duas linhas, e o app inteiro acompanha.
 - na primeira pintura, o script inline do `web/index.html` lê o que foi salvo
   no aparelho ou, na falta, o que o sistema prefere — sem isso a tela pisca
   branca antes do React montar;
-- o botão ☀️/🌙 da topbar troca em uso (`web/src/lib/tema.js`) e grava a
+- o botão ☀︎/☾ da topbar troca em uso (`web/src/lib/tema.js`) e grava a
   escolha no próprio aparelho: o vendedor usa o claro no sol da rua e o escuro
   ao fechar o dia, sem mexer no cadastro;
 - `color-scheme` acompanha, então calendário, relógio e barra de rolagem
   nativos do celular vêm escuros também.
+
+**Sem emoji colorido.** Os ícones da interface são glifos monocromáticos de
+teclado (⌂ ▦ ▤ ◇ ★ ⚑ ✓ ✕ ▶ ◷ ⌖ ⌕ …), que herdam a cor do texto e do tema em
+vez de trazer a paleta do sistema operacional para dentro do CRM. Alguns
+levam `U+FE0E` colado — é o seletor que obriga o celular a desenhar o símbolo
+em texto, senão o Android pinta de colorido mesmo assim.
+
+**Grade responsiva.** As listas em cartão usam `.grid-auto` e
+`.grid-auto-larga`, que multiplicam colunas conforme a tela cresce, sem
+breakpoint fixo. A largura mínima da coluna vai dentro de um `min(..., 100%)`:
+sem isso, numa tela de 360px a coluna continua valendo 360px e o cartão vaza
+pela direita — a tela inteira anda de lado. Vale para qualquer
+`repeat(auto-fit, minmax(Npx, 1fr))` que entrar depois.
 
 **O logotipo** oficial fica em `web/public/`, em duas artes:
 

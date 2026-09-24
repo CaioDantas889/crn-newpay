@@ -127,10 +127,10 @@ export default function Expediente() {
             onClick={() => bater(aberta ? 'saida' : 'entrada')}
           >
             {batendo
-              ? '📍 Pegando o local...'
+              ? '⌖ Pegando o local...'
               : aberta
-                ? '⏹ Encerrar expediente'
-                : '▶️ Iniciar expediente'}
+                ? '■︎ Encerrar expediente'
+                : '▶︎ Iniciar expediente'}
           </button>
         </div>
 
@@ -188,19 +188,19 @@ export default function Expediente() {
           </div>
 
           {dados.historico.length === 0 ? (
-            <Vazio emoji="⏱️" titulo="Nenhum expediente registrado" texto="O primeiro começa no botão acima." />
+            <Vazio emoji="◷" titulo="Nenhum expediente registrado" texto="O primeiro começa no botão acima." />
           ) : (
             <div className="lista-rolagem">
               {dados.historico.map((j) => (
                 <div key={j.id} className="cliente-linha">
                   <span className="avatar" style={{ background: j.emAndamento ? 'var(--brand)' : 'var(--slate)' }}>
-                    {j.emAndamento ? '▶' : `${Math.round(j.duracaoMin / 60)}h`}
+                    {j.emAndamento ? '▶︎' : `${Math.round(j.duracaoMin / 60)}h`}
                   </span>
                   <div className="info">
                     <b>{dia(j.data)}</b>
                     <div className="mini">
                       {hora(j.inicioAt)} às {j.fimAt ? hora(j.fimAt) : 'agora'}
-                      {j.revisar ? ' · ⚠️ revisar' : ''}
+                      {j.revisar ? ' · ⚠︎ revisar' : ''}
                       {j.lancadoPor ? ' · lançado pela gestão' : ''}
                       {j.justificativa ? ` · ${j.justificativa}` : ''}
                     </div>
@@ -264,14 +264,14 @@ function GraficoDias({ historico }) {
  */
 function Local({ rotulo, local, endereco, compacto }) {
   if (!local) {
-    return <p className="mini">📍 {rotulo} sem localização do aparelho.</p>;
+    return <p className="mini">⌖ {rotulo} sem localização do aparelho.</p>;
   }
 
   const coordenada = `${local.lat.toFixed(4)}, ${local.lng.toFixed(4)}`;
 
   return (
     <p className="mini">
-      📍 {compacto ? '' : `${rotulo} em `}
+      ⌖ {compacto ? '' : `${rotulo} em `}
       {endereco ? <b>{endereco}</b> : coordenada}
       {local.precisao ? ` (~${local.precisao} m)` : ''}
       {local.mapa && (

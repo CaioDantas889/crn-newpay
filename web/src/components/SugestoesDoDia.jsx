@@ -52,7 +52,7 @@ export default function SugestoesDoDia({ data, hoje, passado, onAgendar }) {
         <Carregando linhas={3} />
       ) : sugestoes.length === 0 ? (
         <Vazio
-          emoji="✅"
+          emoji="✓"
           titulo="Carteira em dia"
           texto="Ninguém esperando visita além do que já está marcado."
         />
@@ -78,7 +78,7 @@ export default function SugestoesDoDia({ data, hoje, passado, onAgendar }) {
               disabled={agendando === c.id}
               onClick={() => agendar(c)}
             >
-              {agendando === c.id ? '...' : '📅 Agendar'}
+              {agendando === c.id ? '...' : '▤ Agendar'}
             </button>
           </div>
         ))

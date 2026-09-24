@@ -50,7 +50,7 @@ export default function InstalarApp() {
   return (
     <div className="card card-pad instalar-app">
       <div className="linha">
-        <span className="emoji">📲</span>
+        <span className="emoji">⇩︎</span>
         <div className="crescer">
           <b>Instalar na tela inicial</b>
           <p className="mini">Abre como aplicativo, sem digitar endereço — e funciona melhor em campo.</p>

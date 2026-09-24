@@ -5,10 +5,10 @@ import { dateKey, diaMes, hora, isToday } from '../lib/date.js';
 import { Carregando, Vazio } from '../components/ui.jsx';
 
 const KINDS = [
-  { chave: 'tarefa', rotulo: '☑️ Tarefa' },
-  { chave: 'lembrete', rotulo: '⏰ Lembrete' },
-  { chave: 'meta', rotulo: '🎯 Meta diária' },
-  { chave: 'compromisso', rotulo: '📌 Compromisso' },
+  { chave: 'tarefa', rotulo: '✓ Tarefa' },
+  { chave: 'lembrete', rotulo: '◷ Lembrete' },
+  { chave: 'meta', rotulo: '⊙ Meta diária' },
+  { chave: 'compromisso', rotulo: '▤ Compromisso' },
 ];
 
 export default function Tarefas() {
@@ -97,7 +97,7 @@ export default function Tarefas() {
       {carregando ? (
         <Carregando linhas={5} />
       ) : lista.length === 0 ? (
-        <div className="card"><Vazio emoji="📝" titulo="Nenhuma tarefa" texto="Crie o primeiro lembrete acima." /></div>
+        <div className="card"><Vazio emoji="✎" titulo="Nenhuma tarefa" texto="Crie o primeiro lembrete acima." /></div>
       ) : (
         <div className="grid-auto">
         {grupos
@@ -122,7 +122,7 @@ export default function Tarefas() {
                       {t.client && ` · ${t.client.company}`}
                     </div>
                   </div>
-                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(t)} aria-label="Excluir">🗑️</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(t)} aria-label="Excluir">✕</button>
                 </div>
               ))}
             </div>

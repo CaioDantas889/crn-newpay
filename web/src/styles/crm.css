@@ -265,11 +265,15 @@
 
 /* ================== LISTAS QUE VIRAM GRADE EM TELAS LARGAS ============== */
 /* Materiais da biblioteca: cartões lado a lado em vez de linhas gigantes */
-.lista-materiais { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.lista-materiais {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
 .lista-materiais .material { border-right: 1px solid var(--line); }
 
 /* Menu "Mais": quantos atalhos couberem por linha */
-.menu-mais { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.menu-mais { grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); }
 
 /* Mapa aproveita a altura disponível em telas grandes */
 @media (min-width: 1400px) { .mapa-canvas { max-height: 560px; } }

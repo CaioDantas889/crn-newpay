@@ -121,7 +121,7 @@ export default function Pipeline() {
               className={`opcao${temperatura === t ? ' ativa' : ''}`}
               onClick={() => trocarFiltro('temperatura', t, setTemperatura)}
             >
-              {t === '' ? 'Todos' : t === 'quente' ? '🔥 Quentes' : t === 'morno' ? '🌤️ Mornos' : '❄️ Frios'}
+              {t === '' ? 'Todos' : t === 'quente' ? '▲ Quentes' : t === 'morno' ? '● Mornos' : '○ Frios'}
             </button>
           ))}
         </div>
@@ -283,7 +283,7 @@ export default function Pipeline() {
                                 setExcluir(c);
                               }}
                             >
-                              🗑️ Excluir cliente
+                              ✕ Excluir cliente
                             </button>
                           </div>
                         )}
@@ -322,7 +322,7 @@ export default function Pipeline() {
                                 Abrir ficha
                               </button>
                               {c.phone && (
-                                <a className="btn btn-sm" href={`tel:${c.phone.replace(/\D/g, '')}`}>📞 Ligar</a>
+                                <a className="btn btn-sm" href={`tel:${c.phone.replace(/\D/g, '')}`}>✆︎ Ligar</a>
                               )}
                               {(c.whatsapp || c.phone) && (
                                 <a
@@ -331,7 +331,7 @@ export default function Pipeline() {
                                   target="_blank"
                                   rel="noreferrer"
                                 >
-                                  💬 WhatsApp
+                                  ✉︎ WhatsApp
                                 </a>
                               )}
                               <button

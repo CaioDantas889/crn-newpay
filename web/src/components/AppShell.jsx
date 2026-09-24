@@ -69,9 +69,9 @@ export default function AppShell() {
   };
 
   const acoesNovo = [
-    { chave: 'visita', emoji: '⚡', label: 'Registrar visita' },
-    { chave: 'cliente', emoji: '🤝', label: 'Novo cliente' },
-    { chave: 'compromisso', emoji: '📅', label: 'Novo compromisso' },
+    { chave: 'visita', emoji: '✓', label: 'Registrar visita' },
+    { chave: 'cliente', emoji: '◇', label: 'Novo cliente' },
+    { chave: 'compromisso', emoji: '▤', label: 'Novo compromisso' },
   ];
 
   return (
@@ -80,22 +80,22 @@ export default function AppShell() {
         <div className="marca logo-npb" role="img" aria-label="NewPay Bank" title="NewPay CRM" />
 
         <NavLink to="/" end className={railClasse}>
-          <span className="ico">🏠</span> Início
+          <span className="ico">⌂</span> Início
         </NavLink>
         <NavLink to="/pipeline" className={railClasse}>
-          <span className="ico">🗂️</span> Pipeline
+          <span className="ico">▦</span> Pipeline
         </NavLink>
         <NavLink to={`/dia/${hoje}`} className={railClasse}>
-          <span className="ico">📅</span> Agenda
+          <span className="ico">▤</span> Agenda
         </NavLink>
         <NavLink to="/expediente" className={railClasse}>
-          <span className="ico">⏱️</span> Expediente
+          <span className="ico">◷</span> Expediente
         </NavLink>
         <NavLink to="/carteira" className={railClasse}>
-          <span className="ico">🤝</span> Carteira
+          <span className="ico">◇</span> Carteira
         </NavLink>
         <NavLink to="/ranking" className={railClasse}>
-          <span className="ico">🏆</span> Ranking
+          <span className="ico">★</span> Ranking
         </NavLink>
 
         <div className="rail-sep" />
@@ -103,15 +103,15 @@ export default function AppShell() {
         {ehGestor && (
           <>
             <NavLink to="/gestor" className={railClasse}>
-              <span className="ico">📊</span> Gestor
+              <span className="ico">▥</span> Gestor
             </NavLink>
             <NavLink to="/equipe" className={railClasse}>
-              <span className="ico">👥</span> Equipe
+              <span className="ico">▩</span> Equipe
             </NavLink>
           </>
         )}
         <NavLink to="/avisos" className={railClasse}>
-          <span className="ico">📢</span> Avisos
+          <span className="ico">⚑︎</span> Avisos
         </NavLink>
         <NavLink to="/mais" className={railClasse}>
           <span className="ico">⋯</span> Mais
@@ -120,15 +120,15 @@ export default function AppShell() {
         <div className="rail-rodape">
           <Avatar nome={user.name} cor={user.color} />
           <button className="rail-item" onClick={sair} title="Sair">
-            <span className="ico">↩</span> Sair
+            <span className="ico">↩︎</span> Sair
           </button>
         </div>
       </aside>
 
-      <div className="main">
+      <div className={`main${ehGestor ? '' : ' com-fab'}`}>
         <header className="topbar-crm">
           <div className="busca-global" ref={caixaBusca}>
-            <span className="lupa">🔍</span>
+            <span className="lupa">⌕</span>
             <input
               className="input"
               placeholder="Busca global: cliente, empresa, cidade..."
@@ -139,7 +139,7 @@ export default function AppShell() {
             {resultados && (
               <div className="busca-resultados">
                 {resultados.length === 0 ? (
-                  <Vazio emoji="🔍" titulo="Nada encontrado" texto="Tente outro nome ou cidade." />
+                  <Vazio emoji="⌕" titulo="Nada encontrado" texto="Tente outro nome ou cidade." />
                 ) : (
                   resultados.map((c) => (
                     <div key={c.id} className="cliente-linha" onClick={() => abrirCliente(c.id)}>
@@ -190,14 +190,14 @@ export default function AppShell() {
               title={tema === 'escuro' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
               aria-label={tema === 'escuro' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
             >
-              {tema === 'escuro' ? '☀️' : '🌙'}
+              {tema === 'escuro' ? '☀︎' : '☾'}
             </button>
             <button
               className="btn btn-ghost btn-icone sino"
               onClick={() => setPainelAberto((v) => !v)}
               aria-label="Notificações"
             >
-              🔔
+              ⚐︎
               {notificacoes.naoLidas > 0 && <span className="bolha">{notificacoes.naoLidas}</span>}
             </button>
             <Avatar nome={user.name} cor={user.color} />
@@ -216,14 +216,14 @@ export default function AppShell() {
       </div>
 
       {!ehGestor && (
-        <button className="fab" onClick={() => setModal('visita')}>⚡ Visitei</button>
+        <button className="fab" onClick={() => setModal('visita')}>✓ Visitei</button>
       )}
 
       <nav className="bottom-nav">
-        <NavLink to="/" end className={bottomClasse}><span className="ico">🏠</span> Início</NavLink>
-        <NavLink to="/pipeline" className={bottomClasse}><span className="ico">🗂️</span> Pipeline</NavLink>
-        <NavLink to={`/dia/${hoje}`} className={bottomClasse}><span className="ico">📅</span> Agenda</NavLink>
-        <NavLink to="/carteira" className={bottomClasse}><span className="ico">🤝</span> Carteira</NavLink>
+        <NavLink to="/" end className={bottomClasse}><span className="ico">⌂</span> Início</NavLink>
+        <NavLink to="/pipeline" className={bottomClasse}><span className="ico">▦</span> Pipeline</NavLink>
+        <NavLink to={`/dia/${hoje}`} className={bottomClasse}><span className="ico">▤</span> Agenda</NavLink>
+        <NavLink to="/carteira" className={bottomClasse}><span className="ico">◇</span> Carteira</NavLink>
         <NavLink to="/mais" className={bottomClasse}>
           <span className="ico">⋯</span> Mais
           {notificacoes.itens.some((n) => n.kind === 'nova_campanha' || n.kind === 'aviso_nao_lido') && (

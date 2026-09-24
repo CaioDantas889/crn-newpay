@@ -27,7 +27,7 @@ export default function App() {
     <div className="toasts">
       {toasts.map((t) => (
         <div key={t.id} className={`toast${t.tipo === 'erro' ? ' erro' : ''}`}>
-          <span>{t.tipo === 'erro' ? '⚠️' : '✅'}</span>
+          <span>{t.tipo === 'erro' ? '⚠︎' : '✓'}</span>
           <span>{t.mensagem}</span>
         </div>
       ))}

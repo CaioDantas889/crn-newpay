@@ -67,7 +67,7 @@ export default function MapaClientes() {
           </p>
         </div>
         <div className="linha" style={{ flexWrap: 'wrap' }}>
-          <button className="btn btn-brand" onClick={usarMinhaLocalizacao}>📍 Usar minha localização</button>
+          <button className="btn btn-brand" onClick={usarMinhaLocalizacao}>⌖ Usar minha localização</button>
         </div>
       </div>
 

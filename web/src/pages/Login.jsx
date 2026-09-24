@@ -53,12 +53,12 @@ export default function Login() {
         <h2>A central de comando diária do vendedor externo.</h2>
 
         <ul>
-          <li><span>📅</span><span><b>Visão mensal e diária</b> com cores por tipo de compromisso.</span></li>
-          <li><span>🔔</span><span><b>Notificações automáticas</b> de reunião, visita, follow-up vencido e meta.</span></li>
-          <li><span>📚</span><span><b>Biblioteca comercial</b> com vídeos, áudios e PDFs para mandar ao cliente.</span></li>
-          <li><span>🏢</span><span><b>Agenda corporativa</b> com confirmação de presença obrigatória.</span></li>
-          <li><span>📢</span><span><b>Mural de avisos</b> com controle de quem leu cada comunicado.</span></li>
-          <li><span>📊</span><span><b>Painel do gestor</b> com a execução da equipe em tempo real.</span></li>
+          <li><span>▤</span><span><b>Visão mensal e diária</b> com cores por tipo de compromisso.</span></li>
+          <li><span>⚐︎</span><span><b>Notificações automáticas</b> de reunião, visita, follow-up vencido e meta.</span></li>
+          <li><span>▣</span><span><b>Biblioteca comercial</b> com vídeos, áudios e PDFs para mandar ao cliente.</span></li>
+          <li><span>■︎</span><span><b>Agenda corporativa</b> com confirmação de presença obrigatória.</span></li>
+          <li><span>⚑︎</span><span><b>Mural de avisos</b> com controle de quem leu cada comunicado.</span></li>
+          <li><span>▥</span><span><b>Painel do gestor</b> com a execução da equipe em tempo real.</span></li>
         </ul>
       </div>
 

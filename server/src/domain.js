@@ -232,10 +232,10 @@ export function avaliarVisita(cliente, { diasSemContato = 0, followupVencido = f
 /* --------------------------------------------------------------- visitas */
 
 export const RESULTADOS_VISITA = {
-  interessado:     { label: 'Interessado',      stage: 'negociacao', cor: '#16a34a', emoji: '😀' },
-  nao_interessado: { label: 'Não interessado',  stage: 'perdido',    cor: '#dc2626', emoji: '🚫' },
-  fechado:         { label: 'Fechado',          stage: 'fechado',    cor: '#0d9488', emoji: '🤝' },
-  retornar:        { label: 'Retornar depois',  stage: 'contatado',  cor: '#eab308', emoji: '🔁' },
+  interessado:     { label: 'Interessado',      stage: 'negociacao', cor: '#16a34a', emoji: '✓' },
+  nao_interessado: { label: 'Não interessado',  stage: 'perdido',    cor: '#dc2626', emoji: '✕' },
+  fechado:         { label: 'Fechado',          stage: 'fechado',    cor: '#0d9488', emoji: '★' },
+  retornar:        { label: 'Retornar depois',  stage: 'contatado',  cor: '#eab308', emoji: '↻' },
 };
 
 /* ------------------------------------------------ níveis do ranking ---- */
@@ -243,11 +243,11 @@ export const RESULTADOS_VISITA = {
 // comissão aqui. O ranking é reconhecimento, medido em máquinas ativadas.
 
 export const NIVEIS = [
-  { chave: 'bronze',   label: 'Bronze',       emoji: '🥉', min: 0,  cor: '#b45309' },
-  { chave: 'prata',    label: 'Prata',        emoji: '🥈', min: 5,  cor: '#64748b' },
-  { chave: 'ouro',     label: 'Ouro',         emoji: '🥇', min: 10, cor: '#d97706' },
-  { chave: 'diamante', label: 'Diamante',     emoji: '💎', min: 20, cor: '#0ea5e9' },
-  { chave: 'elite',    label: 'Elite NewPay', emoji: '👑', min: 30, cor: '#7c3aed' },
+  { chave: 'bronze',   label: 'Bronze',       emoji: '◔', min: 0,  cor: '#b45309' },
+  { chave: 'prata',    label: 'Prata',        emoji: '◑', min: 5,  cor: '#64748b' },
+  { chave: 'ouro',     label: 'Ouro',         emoji: '◕', min: 10, cor: '#d97706' },
+  { chave: 'diamante', label: 'Diamante',     emoji: '◆', min: 20, cor: '#0ea5e9' },
+  { chave: 'elite',    label: 'Elite NewPay', emoji: '★', min: 30, cor: '#7c3aed' },
 ];
 
 export const nivelPorAtivacoes = (ativacoes = 0) =>
@@ -258,10 +258,10 @@ export const proximoNivel = (ativacoes = 0) => NIVEIS.find((n) => ativacoes < n.
 /* --------------------------------------------------------- KPI diário */
 
 export const KPIS_DIARIOS = [
-  { chave: 'visitas',     label: 'Visitas realizadas',      emoji: '🎯', unidade: 'visitas' },
-  { chave: 'novosLeads',  label: 'Novos leads cadastrados', emoji: '🆕', unidade: 'leads' },
-  { chave: 'propostas',   label: 'Propostas enviadas',      emoji: '📄', unidade: 'propostas' },
-  { chave: 'maquinas',    label: 'Máquinas vendidas',       emoji: '💳', unidade: 'máquinas' },
+  { chave: 'visitas',     label: 'Visitas realizadas',      emoji: '→', unidade: 'visitas' },
+  { chave: 'novosLeads',  label: 'Novos leads cadastrados', emoji: '⊕', unidade: 'leads' },
+  { chave: 'propostas',   label: 'Propostas enviadas',      emoji: '▭', unidade: 'propostas' },
+  { chave: 'maquinas',    label: 'Máquinas vendidas',       emoji: '◰', unidade: 'máquinas' },
 ];
 
 /* ------------------------------------------------------------ utilidades */

@@ -10,13 +10,13 @@ import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
 
 const TIPOS = [
   { chave: '', label: 'Tudo' },
-  { chave: 'video', label: '🎬 Vídeos' },
-  { chave: 'audio', label: '🎧 Áudios' },
-  { chave: 'pdf', label: '📄 PDFs' },
-  { chave: 'link', label: '🔗 Links' },
+  { chave: 'video', label: '▶︎ Vídeos' },
+  { chave: 'audio', label: '♪ Áudios' },
+  { chave: 'pdf', label: '▭ PDFs' },
+  { chave: 'link', label: '↗︎ Links' },
 ];
 
-const EMOJI = { video: '🎬', audio: '🎧', pdf: '📄', link: '🔗' };
+const EMOJI = { video: '▶︎', audio: '♪', pdf: '▭', link: '↗︎' };
 const ACAO = { video: 'Assistir', audio: 'Ouvir', pdf: 'Abrir', link: 'Abrir' };
 
 /** Tipo do material a partir do arquivo escolhido */
@@ -92,7 +92,7 @@ export default function Biblioteca() {
       <div className="card">
         {dados.itens.length === 0 ? (
           <Vazio
-            emoji="📚"
+            emoji="▣"
             titulo="Nenhum material nesta seleção"
             texto={ehGestor ? 'Publique o primeiro material para a equipe.' : undefined}
             acao={
@@ -113,7 +113,7 @@ export default function Biblioteca() {
                   target={m.url && m.url !== '#' ? '_blank' : undefined}
                   rel="noreferrer"
                 >
-                  <span className="icone">{EMOJI[m.tipo] ?? '📄'}</span>
+                  <span className="icone">{EMOJI[m.tipo] ?? '▭'}</span>
                   <div className="crescer">
                     <b>{m.titulo}</b>
                     <p className="mini">{m.descricao}</p>
@@ -136,7 +136,7 @@ export default function Biblioteca() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    📲 Enviar
+                    ⇩︎ Enviar
                   </a>
                   {ehGestor && (
                     <>
@@ -306,7 +306,7 @@ function FormularioMaterial({ inicial, categorias, onFechar, onSalvo }) {
         <label>Ou envie o arquivo (vídeo, áudio, PDF ou imagem, até 64 MB)</label>
         <div className="linha">
           <label className={`btn btn-sm${enviando ? ' desabilitado' : ''}`}>
-            {enviando ? '⏳ Enviando...' : '📎 Escolher arquivo'}
+            {enviando ? '⋯ Enviando...' : '⊕ Escolher arquivo'}
             <input
               type="file"
               accept="video/*,audio/*,application/pdf,image/*"
