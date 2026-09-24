@@ -73,7 +73,7 @@ export default function Equipe() {
         <Carregando linhas={4} />
       ) : lista.length === 0 ? (
         <div className="card">
-          <Vazio emoji="👥" titulo="Ninguém cadastrado" texto="Comece admitindo o primeiro vendedor." />
+          <Vazio emoji="▩" titulo="Ninguém cadastrado" texto="Comece admitindo o primeiro vendedor." />
         </div>
       ) : (
         <div className="grid-auto-larga">
@@ -361,7 +361,7 @@ function RemoverUsuario({ pessoa, onFechar, onRemovido }) {
       }
     >
       <div className="aviso-exclusao">
-        <span className="emoji">⚠️</span>
+        <span className="emoji">⚠︎</span>
         <div>
           <b>Esta ação não pode ser desfeita.</b>
           <p className="menor" style={{ marginTop: 4 }}>

@@ -76,7 +76,7 @@ export default function Carteira() {
                     className={`opcao${temperatura === t ? ' ativa' : ''}`}
                     onClick={() => setTemperatura(t)}
                   >
-                    {t === '' ? 'Todos' : t === 'quente' ? '🔥 Quentes' : t === 'morno' ? '🌤️ Mornos' : '❄️ Frios'}
+                    {t === '' ? 'Todos' : t === 'quente' ? '▲ Quentes' : t === 'morno' ? '● Mornos' : '○ Frios'}
                   </button>
                 ))}
               </div>
@@ -115,7 +115,7 @@ export default function Carteira() {
               <Carregando linhas={6} />
             ) : lista.length === 0 ? (
               <Vazio
-                emoji="🔍"
+                emoji="⌕"
                 titulo="Nenhum cliente encontrado"
                 texto="Ajuste os filtros ou cadastre um novo cliente."
                 acao={<button className="btn btn-brand" onClick={() => setNovo(true)}>+ Novo cliente</button>}

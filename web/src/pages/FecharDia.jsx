@@ -66,7 +66,7 @@ export default function FecharDia() {
           <div className="crescer">
             <h2>KPIs do dia</h2>
             <p className="mini">
-              {dados.fechado ? '✅ Dia já fechado — você pode corrigir e salvar de novo.' : 'Ainda não fechado.'}
+              {dados.fechado ? '✓ Dia já fechado — você pode corrigir e salvar de novo.' : 'Ainda não fechado.'}
             </p>
           </div>
           {dados.fechado && <span className="chip chip-ok">Fechado</span>}
@@ -97,7 +97,7 @@ export default function FecharDia() {
 
         <div className="card-pad" style={{ borderTop: '1px solid var(--line)' }}>
           <button className="btn btn-brand btn-block" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : dados.fechado ? 'Salvar correção' : '✅ Fechar o dia'}
+            {salvando ? 'Salvando...' : dados.fechado ? 'Salvar correção' : '✓ Fechar o dia'}
           </button>
           <p className="mini centro" style={{ marginTop: 8 }}>
             É desse registro que saem visitas, conversão e custo por venda no painel do gestor.

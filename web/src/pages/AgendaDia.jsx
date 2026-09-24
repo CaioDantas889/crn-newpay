@@ -138,12 +138,12 @@ export default function AgendaDia() {
             <Carregando linhas={5} />
           ) : eventos.length === 0 ? (
             <Vazio
-              emoji="☀️"
+              emoji="☀︎"
               titulo="Dia livre"
               texto="Nenhum compromisso agendado."
               acao={
                 <button className="btn btn-brand" onClick={() => navigate('/carteira')}>
-                  🤝 Abrir carteira
+                  ◇ Abrir carteira
                 </button>
               }
             />
@@ -188,7 +188,7 @@ export default function AgendaDia() {
             </div>
 
             {tarefas.length === 0 ? (
-              <Vazio emoji="📝" titulo="Sem tarefas" texto="Adicione um lembrete abaixo." />
+              <Vazio emoji="✎" titulo="Sem tarefas" texto="Adicione um lembrete abaixo." />
             ) : (
               tarefas.map((t) => (
                 <div
@@ -199,7 +199,7 @@ export default function AgendaDia() {
                   <div className="crescer">
                     <div className="texto">{t.title}</div>
                     <div className="mini prazo">
-                      {t.kind === 'meta' ? '🎯 Meta' : t.kind === 'lembrete' ? '⏰ Lembrete' : '☑️ Tarefa'}
+                      {t.kind === 'meta' ? '⊙ Meta' : t.kind === 'lembrete' ? '◷ Lembrete' : '✓ Tarefa'}
                       {t.dueAt ? ` · ${hora(t.dueAt)}` : ''}
                     </div>
                   </div>
@@ -220,8 +220,8 @@ export default function AgendaDia() {
 
           <div className="card card-pad coluna">
             <h3>Atalhos</h3>
-            <button className="btn btn-block" onClick={() => navigate('/carteira')}>🤝 Abrir carteira</button>
-            <button className="btn btn-block" onClick={() => navigate('/avisos')}>📢 Mural de avisos</button>
+            <button className="btn btn-block" onClick={() => navigate('/carteira')}>◇ Abrir carteira</button>
+            <button className="btn btn-block" onClick={() => navigate('/avisos')}>⚑︎ Mural de avisos</button>
           </div>
         </div>
       </div>

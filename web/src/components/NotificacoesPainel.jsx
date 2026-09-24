@@ -5,16 +5,16 @@ import { relativo } from '../lib/date.js';
 import { Vazio } from './ui.jsx';
 
 const ICONES = {
-  reuniao_proxima: '🔴',
-  visita_proxima: '🔵',
-  followup_vencido: '🟡',
-  cliente_sem_retorno: '🕗',
-  meta_diaria: '🎯',
-  nova_campanha: '📢',
-  aviso_nao_lido: '📌',
-  confirmacao_pendente: '✅',
-  equipe_sem_agenda: '🚨',
-  aviso_sem_leitura: '👀',
+  reuniao_proxima: '■︎',
+  visita_proxima: '→',
+  followup_vencido: '↻',
+  cliente_sem_retorno: '◷',
+  meta_diaria: '⊙',
+  nova_campanha: '⚑︎',
+  aviso_nao_lido: '⚑︎',
+  confirmacao_pendente: '✓',
+  equipe_sem_agenda: '⚠︎',
+  aviso_sem_leitura: '◉',
 };
 
 export default function NotificacoesPainel({ onFechar }) {
@@ -63,7 +63,7 @@ export default function NotificacoesPainel({ onFechar }) {
 
         <div className="notif-lista">
           {notificacoes.itens.length === 0 ? (
-            <Vazio emoji="🎉" titulo="Nada pendente" texto="Sua rotina está em dia." />
+            <Vazio emoji="✓" titulo="Nada pendente" texto="Sua rotina está em dia." />
           ) : (
             notificacoes.itens.map((n) => (
               <div
@@ -74,7 +74,7 @@ export default function NotificacoesPainel({ onFechar }) {
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && abrir(n)}
               >
-                <div className="icone">{ICONES[n.kind] ?? '🔔'}</div>
+                <div className="icone">{ICONES[n.kind] ?? '⚐︎'}</div>
                 <div className="crescer">
                   <h4>{n.title}</h4>
                   <p>{n.message}</p>

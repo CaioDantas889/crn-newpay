@@ -9,13 +9,13 @@ import { dateKey, duracao, hora, moeda, pad } from '../lib/date.js';
 import { Avatar, Carregando, Modal, Progresso, Stat, Vazio } from '../components/ui.jsx';
 
 const SITUACOES = {
-  em_reuniao: '🔴 Em reunião',
-  em_visita: '🔵 Em visita',
-  em_rota: '🟢 Em rota',
-  sem_agenda: '⚫ Sem agenda',
-  atrasado: '🟠 Atrasado',
-  dia_concluido: '🟣 Dia concluído',
-  livre: '⚪ Livre',
+  em_reuniao: '■︎ Em reunião',
+  em_visita: '→ Em visita',
+  em_rota: '● Em rota',
+  sem_agenda: '○ Sem agenda',
+  atrasado: '⚠︎ Atrasado',
+  dia_concluido: '✓ Dia concluído',
+  livre: '○ Livre',
 };
 
 export default function PainelGestor() {
@@ -39,7 +39,7 @@ export default function PainelGestor() {
           <h1>Painel do gestor</h1>
           <p className="mini">Execução da equipe e resultado comercial.</p>
         </div>
-        <button className="btn" onClick={() => navigate('/avisos')}>📢 Publicar comunicado</button>
+        <button className="btn" onClick={() => navigate('/avisos')}>⚑︎ Publicar comunicado</button>
       </div>
 
       <div className="abas">
@@ -120,7 +120,7 @@ export default function PainelGestor() {
 
                 <div className="entre">
                   <span className="mini">
-                    {item.totais.maquinasVendidas > 0 ? `💳 ${item.totais.maquinasVendidas} máquina(s) vendida(s)` : 'Nenhuma venda no dia'}
+                    {item.totais.maquinasVendidas > 0 ? `◰ ${item.totais.maquinasVendidas} máquina(s) vendida(s)` : 'Nenhuma venda no dia'}
                   </span>
                   <span className={`chip ${item.kpiFechado ? 'chip-ok' : 'chip-alerta'}`}>
                     {item.kpiFechado ? 'KPI fechado' : 'KPI pendente'}
@@ -372,7 +372,7 @@ function PontoEquipe({ data, setData }) {
 
       {dados.linhas.length === 0 ? (
         <div className="card">
-          <Vazio emoji="⏱️" titulo="Nenhum vendedor ativo" texto="Cadastre a equipe para acompanhar o ponto." />
+          <Vazio emoji="◷" titulo="Nenhum vendedor ativo" texto="Cadastre a equipe para acompanhar o ponto." />
         </div>
       ) : (
         <div className="grid-auto-larga">
@@ -398,7 +398,7 @@ function PontoEquipe({ data, setData }) {
                       <b>{horaCurta(r.inicioAt)} → {r.fimAt ? horaCurta(r.fimAt) : 'em aberto'}</b>
                       {r.fimAt ? ` · ${duracao(r.duracaoMin)}` : ''}
                       {r.lancadoPor ? ' · lançado pela gestão' : ''}
-                      {r.revisar ? ' · ⚠️ revisar' : ''}
+                      {r.revisar ? ' · ⚠︎ revisar' : ''}
                       {r.justificativa ? ` · ${r.justificativa}` : ''}
                       <LocalBatida registro={r} />
                     </span>

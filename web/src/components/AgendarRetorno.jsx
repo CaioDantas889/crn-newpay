@@ -11,7 +11,7 @@ const PRESETS = [
   { chave: 'custom', rotulo: 'Data personalizada', dias: null },
 ];
 
-/** Botão "📅 Agendar Retorno" da oportunidade: cria o compromisso na agenda. */
+/** Botão "▤ Agendar Retorno" da oportunidade: cria o compromisso na agenda. */
 export default function AgendarRetorno({ cliente, onFechar, onAgendado }) {
   const { toast, recarregarNotificacoes } = useApp();
   const [preset, setPreset] = useState('3dias');
@@ -47,7 +47,7 @@ export default function AgendarRetorno({ cliente, onFechar, onAgendado }) {
 
   return (
     <Modal
-      titulo="📅 Agendar retorno"
+      titulo="▤ Agendar retorno"
       subtitulo={`${cliente.name} — ${cliente.company}`}
       onFechar={onFechar}
       rodape={
@@ -98,10 +98,10 @@ export default function AgendarRetorno({ cliente, onFechar, onAgendado }) {
         <label>Tipo de retorno</label>
         <div className="opcoes">
           <button className={`opcao${tipo === 'followup' ? ' ativa' : ''}`} onClick={() => setTipo('followup')}>
-            🟡 Follow-up por telefone
+            ● Follow-up por telefone
           </button>
           <button className={`opcao${tipo === 'visita' ? ' ativa' : ''}`} onClick={() => setTipo('visita')}>
-            🔵 Visita presencial
+            ● Visita presencial
           </button>
         </div>
       </div>

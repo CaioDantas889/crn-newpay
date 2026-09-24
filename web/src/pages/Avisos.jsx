@@ -6,11 +6,11 @@ import { Avatar, Carregando, Modal, Progresso, Vazio } from '../components/ui.js
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
 
 const CATEGORIAS = {
-  campanha: { rotulo: '📢 Campanha', cor: 'var(--brand-strong)' },
-  taxas: { rotulo: '💳 Taxas', cor: 'var(--blue)' },
-  treinamento: { rotulo: '🎓 Treinamento', cor: 'var(--purple)' },
-  meta: { rotulo: '🎯 Meta', cor: 'var(--orange)' },
-  geral: { rotulo: '📌 Geral', cor: 'var(--slate)' },
+  campanha: { rotulo: '⚑︎ Campanha', cor: 'var(--brand-strong)' },
+  taxas: { rotulo: '◰ Taxas', cor: 'var(--blue)' },
+  treinamento: { rotulo: '◈ Treinamento', cor: 'var(--purple)' },
+  meta: { rotulo: '⊙ Meta', cor: 'var(--orange)' },
+  geral: { rotulo: '▪ Geral', cor: 'var(--slate)' },
 };
 
 export default function Avisos() {
@@ -50,7 +50,7 @@ export default function Avisos() {
       {carregando ? (
         <Carregando linhas={5} />
       ) : lista.length === 0 ? (
-        <div className="card"><Vazio emoji="📭" titulo="Nenhum comunicado" /></div>
+        <div className="card"><Vazio emoji="◌" titulo="Nenhum comunicado" /></div>
       ) : (
         <div className="grid-auto-larga">
         {lista.map((a) => {
@@ -62,7 +62,7 @@ export default function Avisos() {
                   <div className="linha" style={{ gap: 8, marginBottom: 4 }}>
                     <span className="chip" style={{ color: cat.cor, borderColor: cat.cor }}>{cat.rotulo}</span>
                     {a.priority === 'alta' && <span className="chip chip-erro">Prioritário</span>}
-                    {a.read && <span className="chip chip-ok">✅ Lido</span>}
+                    {a.read && <span className="chip chip-ok">✓ Lido</span>}
                   </div>
                   <h2>{a.title}</h2>
                   <p className="mini">
@@ -75,7 +75,7 @@ export default function Avisos() {
                     title="Excluir comunicado"
                     onClick={() => setExcluir(a)}
                   >
-                    🗑️
+                    ✕
                   </button>
                 )}
               </div>
@@ -85,7 +85,7 @@ export default function Avisos() {
 
                 {!ehGestor && !a.read && (
                   <button className="btn btn-brand btn-block" onClick={() => marcarLido(a)}>
-                    ✅ Li o comunicado
+                    ✓ Li o comunicado
                   </button>
                 )}
 

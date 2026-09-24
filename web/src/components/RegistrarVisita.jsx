@@ -392,7 +392,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
               ))}
               {fotos.length < 4 && (
                 <label className="botao-anexo">
-                  <span className="emoji">📷</span>
+                  <span className="emoji">▣</span>
                   Foto
                   <input
                     type="file" accept="image/*" capture="environment" multiple
@@ -413,7 +413,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                   <button className="btn btn-ghost btn-sm" onClick={() => setAudio(null)}>Remover</button>
                 </div>
                 <p className="mini">
-                  🎙️ Áudio anexado{audio.tamanho ? ` · ${Math.max(1, Math.round(audio.tamanho / 1024))} KB` : ''} —
+                  ● Áudio anexado{audio.tamanho ? ` · ${Math.max(1, Math.round(audio.tamanho / 1024))} KB` : ''} —
                   vai junto ao salvar a visita.
                 </p>
               </>
@@ -426,7 +426,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                     disabled={Boolean(impedimentoAudio) || preparandoAudio}
                     title={impedimentoAudio ?? undefined}
                   >
-                    {preparandoAudio ? '⏳ Preparando...' : gravando ? '⏹ Parar gravação' : '🎙️ Gravar áudio'}
+                    {preparandoAudio ? '⋯ Preparando...' : gravando ? '■︎ Parar gravação' : '● Gravar áudio'}
                   </button>
                   {gravando && (
                     <span className="linha mini">
@@ -441,11 +441,11 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
           </div>
 
           <div className="campo">
-            {buscandoLocal && <p className="mini">📍 Procurando sua localização...</p>}
+            {buscandoLocal && <p className="mini">⌖ Procurando sua localização...</p>}
 
             {local && !buscandoLocal && (
               <p className="mini">
-                📍 Localização capturada no momento da visita
+                ⌖ Localização capturada no momento da visita
                 {local.precisao ? ` (precisão de ~${local.precisao} m)` : ''}.
               </p>
             )}
@@ -453,7 +453,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
             {!local && !buscandoLocal && (
               <div className="linha">
                 <span className="mini crescer">
-                  📍 {localErro ?? 'Sem localização do aparelho.'} A visita vai usar o endereço
+                  ⌖ {localErro ?? 'Sem localização do aparelho.'} A visita vai usar o endereço
                   cadastrado do cliente.
                 </span>
                 <button type="button" className="btn btn-sm" onClick={pegarLocalizacao}>

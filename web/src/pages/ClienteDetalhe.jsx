@@ -31,7 +31,7 @@ export default function ClienteDetalhe() {
     return (
       <div className="page">
         <Vazio
-          emoji="🚫"
+          emoji="✕"
           titulo="Não foi possível abrir este cliente"
           texto={erro ?? 'Cliente não encontrado.'}
           acao={<button className="btn btn-primary" onClick={() => navigate('/carteira')}>Voltar para a carteira</button>}
@@ -105,11 +105,11 @@ export default function ClienteDetalhe() {
       {/* ---------------------------------------------- ações de campo */}
       <div className="card card-pad coluna">
         <div className="linha" style={{ flexWrap: 'wrap' }}>
-          <button className="btn btn-brand" onClick={() => setModal('visita')}>⚡ Registrar visita</button>
-          <button className="btn btn-primary" onClick={() => setModal('retorno')}>📅 Agendar retorno</button>
-          <a className="btn" href={`tel:${somenteNumeros(cliente.phone)}`}>📞 Ligar</a>
+          <button className="btn btn-brand" onClick={() => setModal('visita')}>✓ Registrar visita</button>
+          <button className="btn btn-primary" onClick={() => setModal('retorno')}>▤ Agendar retorno</button>
+          <a className="btn" href={`tel:${somenteNumeros(cliente.phone)}`}>✆︎ Ligar</a>
           <a className="btn" href={`https://wa.me/55${somenteNumeros(cliente.whatsapp || cliente.phone)}`} target="_blank" rel="noreferrer">
-            💬 WhatsApp
+            ✉︎ WhatsApp
           </a>
           <a
             className="btn"
@@ -117,9 +117,9 @@ export default function ClienteDetalhe() {
             target="_blank"
             rel="noreferrer"
           >
-            🗺️ Rota
+            ▨ Rota
           </a>
-          <button className="btn" onClick={() => navigate(`/objecoes?clientId=${cliente.id}`)}>💬 Argumentos</button>
+          <button className="btn" onClick={() => navigate(`/objecoes?clientId=${cliente.id}`)}>⁇ Argumentos</button>
         </div>
         <div className="opcoes">
           <span className="selo" style={{ alignSelf: 'center' }}>Mover no funil:</span>
@@ -140,7 +140,7 @@ export default function ClienteDetalhe() {
             Cliente cadastrado em {diaMes(cliente.createdAt)} · {cliente.visitas.length} visita(s) registrada(s)
           </span>
           <button className="btn btn-danger btn-sm" onClick={() => setExcluir({ tipo: 'cliente' })}>
-            🗑️ Excluir cliente
+            ✕ Excluir cliente
           </button>
         </div>
       </div>
@@ -163,7 +163,7 @@ export default function ClienteDetalhe() {
 
         {!diagnosticoPreenchido ? (
           <Vazio
-            emoji="📋"
+            emoji="▤"
             titulo="Sem diagnóstico, sem prioridade"
             texto="São 5 perguntas. O CRM usa as respostas para pontuar a oportunidade e ordenar sua rota."
             acao={<button className="btn btn-brand" onClick={() => setModal('diagnostico')}>Preencher agora</button>}
@@ -248,7 +248,7 @@ export default function ClienteDetalhe() {
               title="Excluir este negócio"
               onClick={() => setExcluir({ tipo: 'negocio', dado: n })}
             >
-              🗑️
+              ✕
             </button>
           </div>
         ))}
@@ -279,7 +279,7 @@ export default function ClienteDetalhe() {
             </div>
           </div>
           <button className="btn btn-primary btn-block" onClick={enviarProposta}>
-            📄 Registrar proposta ({proposta.maquinas} máquina(s))
+            ▭ Registrar proposta ({proposta.maquinas} máquina(s))
           </button>
         </div>
       </div>
@@ -292,7 +292,7 @@ export default function ClienteDetalhe() {
             <span className="card-sub">{cliente.visitas.length}</span>
           </div>
           {cliente.visitas.length === 0 ? (
-            <Vazio emoji="🚶" titulo="Nenhuma visita registrada" />
+            <Vazio emoji="→" titulo="Nenhuma visita registrada" />
           ) : (
             cliente.visitas.slice(0, 8).map((v) => (
               <div key={v.id} className="card-pad" style={{ borderBottom: '1px solid var(--line)' }}>
@@ -307,7 +307,7 @@ export default function ClienteDetalhe() {
                       title="Excluir esta visita"
                       onClick={() => setExcluir({ tipo: 'visita', dado: v })}
                     >
-                      🗑️
+                      ✕
                     </button>
                   </span>
                 </div>
@@ -335,7 +335,7 @@ export default function ClienteDetalhe() {
           </div>
           {cliente.proximos.length === 0 ? (
             <Vazio
-              emoji="📅"
+              emoji="▤"
               titulo="Sem retorno agendado"
               texto="Cliente sem próximo passo é cliente que esfria."
               acao={<button className="btn btn-brand" onClick={() => setModal('retorno')}>Agendar retorno</button>}

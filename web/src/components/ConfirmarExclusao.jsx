@@ -43,7 +43,7 @@ export default function ConfirmarExclusao({
       }
     >
       <div className="aviso-exclusao">
-        <span className="emoji">⚠️</span>
+        <span className="emoji">⚠︎</span>
         <div>
           <b>Esta ação não pode ser desfeita.</b>
           {descricao && <p className="menor" style={{ marginTop: 4 }}>{descricao}</p>}

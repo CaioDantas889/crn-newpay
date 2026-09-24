@@ -56,15 +56,15 @@ export default function EventoCard({ evento, onMudou, onEditar }) {
             <span>
               {hora(evento.start)} – {hora(evento.end)}
             </span>
-            {evento.location && <span>📍 {evento.location}</span>}
-            {evento.scope === 'corporativo' && <span className="chip">🏢 Corporativo</span>}
+            {evento.location && <span>⌖ {evento.location}</span>}
+            {evento.scope === 'corporativo' && <span className="chip">■︎ Corporativo</span>}
             {evento.status === 'realizado' && <span className="chip chip-ok">Realizado</span>}
             {evento.status === 'cancelado' && <span className="chip chip-erro">Cancelado</span>}
             {evento.status === 'nao_compareceu' && <span className="chip chip-alerta">Não compareceu</span>}
           </div>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={() => onEditar?.(evento)} aria-label="Editar">
-          ✏️
+          ✎
         </button>
       </div>
 
@@ -73,10 +73,10 @@ export default function EventoCard({ evento, onMudou, onEditar }) {
       {evento.client && (
         <div className="linha mini">
           <Link to={`/carteira/${evento.client.id}`} className="chip">
-            🤝 {evento.client.company}
+            ◇ {evento.client.company}
           </Link>
           <a className="chip" href={`tel:${evento.client.phone.replace(/\D/g, '')}`}>
-            📞 {evento.client.phone}
+            ✆︎ {evento.client.phone}
           </a>
         </div>
       )}
@@ -85,12 +85,12 @@ export default function EventoCard({ evento, onMudou, onEditar }) {
         <div className="evento-acoes">
           {confirmacao ? (
             <span className={`chip ${confirmacao === 'confirmado' ? 'chip-ok' : 'chip-erro'}`}>
-              {confirmacao === 'confirmado' ? '✅ Presença confirmada' : '✖ Ausência informada'}
+              {confirmacao === 'confirmado' ? '✓ Presença confirmada' : '✕ Ausência informada'}
             </span>
           ) : (
             <>
               <button className="btn btn-brand btn-sm" onClick={() => confirmar('confirmado')}>
-                ✅ Confirmar presença
+                ✓ Confirmar presença
               </button>
               <button className="btn btn-sm" onClick={() => confirmar('recusado')}>
                 Não poderei
@@ -108,7 +108,7 @@ export default function EventoCard({ evento, onMudou, onEditar }) {
       {podeConcluir && (
         <div className="evento-acoes">
           <button className="btn btn-brand btn-sm" onClick={() => mudarStatus('realizado')}>
-            ✔ Marcar como realizado
+            ✓ Marcar como realizado
           </button>
           <button className="btn btn-sm" onClick={() => mudarStatus('nao_compareceu')}>
             Cliente ausente

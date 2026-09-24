@@ -9,10 +9,10 @@ import { hora, moeda, relativo } from '../lib/date.js';
 import { Carregando, Progresso, Vazio } from '../components/ui.jsx';
 
 const ATIVIDADES = [
-  { chave: 'visitasAgendadas', label: 'Visitas agendadas', emoji: '📍', rota: '/dia' },
-  { chave: 'followupsPendentes', label: 'Follow-ups pendentes', emoji: '🟡', rota: '/dia' },
-  { chave: 'clientesParaRetornar', label: 'Clientes para retornar', emoji: '🔁', rota: '/carteira?ordem=contato' },
-  { chave: 'propostasEnviadas', label: 'Propostas enviadas hoje', emoji: '📄', rota: '/carteira?stage=proposta' },
+  { chave: 'visitasAgendadas', label: 'Visitas agendadas', emoji: '▤', rota: '/dia' },
+  { chave: 'followupsPendentes', label: 'Follow-ups pendentes', emoji: '⚑︎', rota: '/dia' },
+  { chave: 'clientesParaRetornar', label: 'Clientes para retornar', emoji: '↻', rota: '/carteira?ordem=contato' },
+  { chave: 'propostasEnviadas', label: 'Propostas enviadas hoje', emoji: '▭', rota: '/carteira?stage=proposta' },
 ];
 
 export default function Inicio() {
@@ -37,12 +37,12 @@ export default function Inicio() {
             {hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
-        <button className="btn btn-brand" onClick={abrirRegistroVisita}>⚡ Registrar visita</button>
+        <button className="btn btn-brand" onClick={abrirRegistroVisita}>✓ Registrar visita</button>
       </div>
 
       {!kpiHoje.fechado && hoje.getHours() >= 16 && (
         <button className="card card-pad linha alerta-kpi" onClick={() => navigate('/fechar-dia')}>
-          <span style={{ fontSize: '1.4rem' }}>📋</span>
+          <span style={{ fontSize: '1.4rem' }}>▤</span>
           <div className="crescer" style={{ textAlign: 'left' }}>
             <b>Você ainda não fechou o dia</b>
             <p className="mini">
@@ -81,7 +81,7 @@ export default function Inicio() {
               ? 'sem meta definida para o mês'
               : faltam > 0
                 ? `faltam ${faltam} máquinas`
-                : 'meta batida 🎉'}
+                : 'meta batida ★'}
           </span>
         </div>
 
@@ -130,7 +130,7 @@ export default function Inicio() {
         </div>
         {atividades.followupsVencidos > 0 && (
           <div className="card-pad" style={{ paddingTop: 0 }}>
-            <div className="chip chip-erro">⏰ {atividades.followupsVencidos} follow-up(s) vencido(s)</div>
+            <div className="chip chip-erro">⚠︎ {atividades.followupsVencidos} follow-up(s) vencido(s)</div>
           </div>
         )}
       </div>
@@ -170,7 +170,7 @@ export default function Inicio() {
           </div>
           {clientesQuentes.length === 0 ? (
             <Vazio
-              emoji="🔍"
+              emoji="⌕"
               titulo="Nenhum lead quente"
               texto="Preencha o diagnóstico dos clientes para o CRM pontuar a oportunidade."
               acao={<button className="btn btn-brand" onClick={() => navigate('/carteira')}>Abrir carteira</button>}
@@ -199,10 +199,10 @@ export default function Inicio() {
         </div>
         {proximosCompromissos.length === 0 ? (
           <Vazio
-            emoji="✅"
+            emoji="✓"
             titulo="Nada mais marcado para hoje"
             texto="Agende o retorno dos clientes pela carteira."
-            acao={<button className="btn btn-brand" onClick={() => navigate('/carteira')}>🤝 Abrir carteira</button>}
+            acao={<button className="btn btn-brand" onClick={() => navigate('/carteira')}>◇ Abrir carteira</button>}
           />
         ) : (
           proximosCompromissos.map((ev) => (

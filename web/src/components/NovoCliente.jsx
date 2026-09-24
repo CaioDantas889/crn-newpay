@@ -130,7 +130,7 @@ export default function NovoCliente({ onFechar, onCriado }) {
       </div>
 
       <button className="btn btn-block" onClick={capturarLocal}>
-        {local ? '📍 Localização capturada' : '📍 Usar minha localização atual'}
+        {local ? '⌖ Localização capturada' : '⌖ Usar minha localização atual'}
       </button>
       <p className="mini">
         Com a localização o cliente aparece no mapa e entra no cálculo das rotas.

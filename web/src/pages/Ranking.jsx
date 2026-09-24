@@ -39,11 +39,11 @@ export default function Ranking() {
             <span>
               {minhaPosicao.proximoNivel
                 ? `Faltam ${minhaPosicao.faltamParaProximo} para ${minhaPosicao.proximoNivel.emoji} ${minhaPosicao.proximoNivel.label}`
-                : 'Nível máximo alcançado 👑'}
+                : 'Nível máximo alcançado ★'}
             </span>
             <span>
               {minhaPosicao.posicao === 1
-                ? 'Você está liderando 🏆'
+                ? 'Você está liderando ★'
                 : `${minhaPosicao.faltamParaLiderar} para assumir a liderança`}
             </span>
           </div>
@@ -65,7 +65,7 @@ export default function Ranking() {
               <span className="nome">{l.vendedor.name.split(' ')[0]}</span>
               <b>{l.maquinasAtivadas}</b>
               <span className="mini">máquinas ativadas</span>
-              <span className="mini">{l.posicao === 1 ? '🥇' : l.posicao === 2 ? '🥈' : '🥉'}</span>
+              <span className="mini">{l.posicao === 1 ? '◕' : l.posicao === 2 ? '◑' : '◔'}</span>
             </div>
           ))}
         </div>

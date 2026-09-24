@@ -225,6 +225,11 @@ ul { margin: 0; padding: 0; list-style: none; }
 .sidebar-rodape { margin-top: auto; border-top: 1px solid var(--chrome-line); padding-top: 8px; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-bottom: calc(var(--nav-h) + 6px); }
+/* O botão flutuante "Visitei" paira sobre o conteúdo: sem esta folga no fim da
+   página, ele cobre a última linha da lista — e às vezes um botão dela. */
+@media (max-width: 899px) {
+  .main.com-fab { padding-bottom: calc(var(--nav-h) + 68px); }
+}
 
 .topbar {
   position: sticky; top: 0; z-index: 30;
@@ -296,9 +301,20 @@ ul { margin: 0; padding: 0; list-style: none; }
   .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-/* Colunas que se multiplicam conforme a tela cresce, sem breakpoint fixo */
-.grid-auto { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
-.grid-auto-larga { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+/* Colunas que se multiplicam conforme a tela cresce, sem breakpoint fixo.
+   O min() e obrigatorio: sem ele, numa tela de 360px a coluna continua valendo
+   360px e o cartao vaza pela direita — a tela inteira anda de lado. A primeira
+   declaracao fica de reserva para navegador que nao entende min(). */
+.grid-auto {
+  display: grid; gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+}
+.grid-auto-larga {
+  display: grid; gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+}
 
 .col-span-2 { grid-column: span 2; }
 @media (max-width: 759px) { .col-span-2 { grid-column: span 1; } }

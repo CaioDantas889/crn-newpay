@@ -176,7 +176,7 @@ export default function Calendario() {
           <h2>Próximos compromissos</h2>
         </div>
         {proximos.length === 0 ? (
-          <Vazio emoji="🗓️" titulo="Nada agendado à frente" texto="Agende retornos pela carteira para encher o seu dia." />
+          <Vazio emoji="▤" titulo="Nada agendado à frente" texto="Agende retornos pela carteira para encher o seu dia." />
         ) : (
           proximos.map((ev) => (
             <div
@@ -205,7 +205,7 @@ export default function Calendario() {
                   {ev.location ? ` · ${ev.location}` : ''}
                 </span>
               </div>
-              {ev.scope === 'corporativo' && <span className="chip">🏢</span>}
+              {ev.scope === 'corporativo' && <span className="chip">■︎</span>}
             </div>
           ))
         )}

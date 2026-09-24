@@ -13,19 +13,19 @@ export default function Mais() {
   const [trocandoSenha, setTrocandoSenha] = useState(false);
 
   const itens = [
-    { to: '/pipeline', emoji: '🗂️', label: 'Pipeline' },
-    { to: '/calendario', emoji: '📅', label: 'Calendário' },
-    { to: `/dia/${dateKey()}`, emoji: '📆', label: 'Agenda de hoje' },
-    { to: '/tarefas', emoji: '📝', label: 'Tarefas' },
-    { to: '/expediente', emoji: '⏱️', label: 'Expediente' },
-    { to: '/fechar-dia', emoji: '✅', label: 'Fechar o dia' },
-    { to: '/biblioteca', emoji: '📚', label: 'Biblioteca' },
-    { to: '/objecoes', emoji: '💬', label: 'Objeções' },
-    { to: '/avisos', emoji: '📢', label: 'Mural de avisos' },
+    { to: '/pipeline', emoji: '▦', label: 'Pipeline' },
+    { to: '/calendario', emoji: '▤', label: 'Calendário' },
+    { to: `/dia/${dateKey()}`, emoji: '▤', label: 'Agenda de hoje' },
+    { to: '/tarefas', emoji: '✎', label: 'Tarefas' },
+    { to: '/expediente', emoji: '◷', label: 'Expediente' },
+    { to: '/fechar-dia', emoji: '✓', label: 'Fechar o dia' },
+    { to: '/biblioteca', emoji: '▣', label: 'Biblioteca' },
+    { to: '/objecoes', emoji: '⁇', label: 'Objeções' },
+    { to: '/avisos', emoji: '⚑︎', label: 'Mural de avisos' },
     ...(ehGestor
       ? [
-          { to: '/gestor', emoji: '📊', label: 'Painel do gestor' },
-          { to: '/equipe', emoji: '👥', label: 'Equipe' },
+          { to: '/gestor', emoji: '▥', label: 'Painel do gestor' },
+          { to: '/equipe', emoji: '▩', label: 'Equipe' },
         ]
       : []),
   ];
@@ -53,7 +53,7 @@ export default function Mais() {
       </div>
 
       <div className="coluna">
-        <button className="btn btn-block" onClick={() => setTrocandoSenha(true)}>🔑 Trocar minha senha</button>
+        <button className="btn btn-block" onClick={() => setTrocandoSenha(true)}>✱ Trocar minha senha</button>
         <button className="btn btn-danger btn-block" onClick={sair}>Sair da conta</button>
       </div>
 
