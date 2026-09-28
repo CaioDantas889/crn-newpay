@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import { find, id, insert, logActivity, table, update } from '../store.js';
 import { isManager, requireAuth } from '../auth.js';
+import { PRECISAO_MAXIMA_PONTO_M } from '../domain.js';
 import { dateKey, endOfDay, startOfDay } from '../lib/dates.js';
 import { buscarEndereco, linkDoMapa } from '../lib/endereco.js';
 
@@ -33,7 +34,13 @@ function lerLocal(corpo = {}) {
 }
 
 const comMapa = (local) =>
-  local ? { ...local, mapa: linkDoMapa(local.lat, local.lng) } : null;
+  local
+    ? {
+        ...local,
+        mapa: linkDoMapa(local.lat, local.lng),
+        impreciso: Number(local.precisao) > PRECISAO_MAXIMA_PONTO_M,
+      }
+    : null;
 
 const expandir = (j) => ({
   ...j,

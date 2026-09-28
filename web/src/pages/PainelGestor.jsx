@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { dateKey, duracao, hora, moeda, pad } from '../lib/date.js';
-import { Avatar, Carregando, Modal, Progresso, Stat, Vazio } from '../components/ui.jsx';
+import { distancia } from '../lib/mapa.js';
+import { Avatar, Carregando, Modal, Progresso, Stat, Vazio, iniciais } from '../components/ui.jsx';
+import MapaPonto from '../components/MapaPonto.jsx';
 
 const SITUACOES = {
   em_reuniao: '■︎ Em reunião',
@@ -320,15 +322,34 @@ const paraInput = (iso) => {
   return `${dateKey(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-/** Onde a batida aconteceu, com link do mapa quando o aparelho informou */
-function LocalBatida({ registro }) {
-  const { inicioLocal: local, inicioEndereco: endereco } = registro;
-  if (!local?.mapa) return <> · sem localização</>;
+/**
+ * Onde a batida aconteceu: a rua, a margem de erro do aparelho e o link do
+ * mapa. Posição imprecisa (antena ou IP no lugar do GPS) vem avisada antes do
+ * endereço — senão "Rua São Francisco, 370" parece exata quando pode ser outra
+ * cidade.
+ */
+function LocalBatida({ rotulo, local, endereco }) {
+  const titulo = rotulo && <span className="rotulo">{rotulo}</span>;
+
+  if (!local) {
+    return <p className="ponto-local sem">{titulo}sem localização do aparelho</p>;
+  }
+
+  const lugar = endereco || `${local.lat.toFixed(5)}, ${local.lng.toFixed(5)}`;
   return (
-    <>
+    <p className={`ponto-local${local.impreciso ? ' impreciso' : ''}`}>
+      {titulo}
+      {local.impreciso ? (
+        <>⚠︎ local impreciso (±{distancia(local.precisao)}), aponta para {lugar}</>
+      ) : (
+        <>
+          <b>{lugar}</b>
+          {local.precisao ? ` · ±${distancia(local.precisao)}` : ''}
+        </>
+      )}
       {' · '}
-      <a href={local.mapa} target="_blank" rel="noreferrer">{endereco || 'ver no mapa'}</a>
-    </>
+      <a href={local.mapa} target="_blank" rel="noreferrer">abrir mapa ↗</a>
+    </p>
   );
 }
 
@@ -340,11 +361,48 @@ function LocalBatida({ registro }) {
 function PontoEquipe({ data, setData }) {
   const { dados, carregando, recarregar } = useRecurso(() => endpoints.jornadaEquipe(data), [data]);
   const [ajuste, setAjuste] = useState(null);
+  const [foco, setFoco] = useState(null); // chave do pino aberto no mapa
 
   if (carregando || !dados) return <Carregando linhas={5} />;
 
   const minutosDoDia = dados.linhas.reduce((s, l) => s + l.minutos, 0);
   const aRevisar = dados.linhas.filter((l) => l.revisar).length;
+
+  // Cada entrada e cada saída com posição vira um pino no mapa
+  const batidas = dados.linhas.flatMap((l) =>
+    l.registros.flatMap((r) =>
+      [
+        r.inicioLocal && { chave: `${r.id}:entrada`, tipo: 'entrada', at: r.inicioAt, local: r.inicioLocal, endereco: r.inicioEndereco, vendedor: l.vendedor },
+        r.fimLocal && { chave: `${r.id}:saida`, tipo: 'saída', at: r.fimAt, local: r.fimLocal, endereco: r.fimEndereco, vendedor: l.vendedor },
+      ].filter(Boolean)
+    )
+  );
+  const pinos = batidas.map((b) => ({
+    chave: b.chave,
+    lat: b.local.lat,
+    lng: b.local.lng,
+    precisao: b.local.precisao,
+    impreciso: b.local.impreciso,
+    saida: b.tipo === 'saída',
+    cor: b.vendedor.color,
+    sigla: iniciais(b.vendedor.name),
+    titulo: `${b.vendedor.name} · ${b.tipo} às ${horaCurta(b.at)}`,
+  }));
+  const aberta = batidas.find((b) => b.chave === foco);
+
+  // Batida do aparelho que chegou sem posição. Lançamento da gestão não conta:
+  // esse nunca teve aparelho.
+  const doAparelho = dados.linhas.flatMap((l) => l.registros.filter((r) => !r.lancadoPor));
+  const semLocal =
+    doAparelho.filter((r) => !r.inicioLocal).length + doAparelho.filter((r) => r.fimAt && !r.fimLocal).length;
+  const imprecisas = batidas.filter((b) => b.local.impreciso).length;
+  const resumoMapa = [
+    `${batidas.length} batida(s) com localização`,
+    semLocal > 0 && `${semLocal} sem localização`,
+    imprecisas > 0 && `${imprecisas} imprecisa(s)`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <>
@@ -370,6 +428,46 @@ function PontoEquipe({ data, setData }) {
         />
       </div>
 
+      <div className="card">
+        <div className="card-header">
+          <div className="crescer">
+            <h2>Onde bateram o ponto</h2>
+            <p className="mini">{resumoMapa}</p>
+          </div>
+        </div>
+
+        {batidas.length === 0 ? (
+          <Vazio
+            emoji="⌖"
+            titulo="Nenhuma batida com localização neste dia"
+            texto={semLocal > 0 ? 'As batidas do dia chegaram sem a posição do aparelho.' : 'Ninguém bateu o ponto ainda.'}
+          />
+        ) : (
+          <>
+            <MapaPonto pinos={pinos} selecionado={foco} onSelecionar={setFoco} />
+
+            {aberta && (
+              <div className="ponto-detalhe">
+                <Avatar nome={aberta.vendedor.name} cor={aberta.vendedor.color} />
+                <div className="crescer">
+                  <b>{aberta.vendedor.name}</b>
+                  <span className="mini"> · {aberta.tipo} às {horaCurta(aberta.at)}</span>
+                  <LocalBatida local={aberta.local} endereco={aberta.endereco} />
+                </div>
+                <button className="btn btn-ghost btn-icone" onClick={() => setFoco(null)} aria-label="Fechar">✕</button>
+              </div>
+            )}
+
+            <div className="mapa-legenda">
+              <span><i className="pino-entrada" /> Entrada</span>
+              <span><i className="pino-saida" /> Saída</span>
+              <span><i className="pino-raio" /> Margem de erro do aparelho</span>
+              {imprecisas > 0 && <span><i className="pino-impreciso">?</i> Sem GPS: posição imprecisa</span>}
+            </div>
+          </>
+        )}
+      </div>
+
       {dados.linhas.length === 0 ? (
         <div className="card">
           <Vazio emoji="◷" titulo="Nenhum vendedor ativo" texto="Cadastre a equipe para acompanhar o ponto." />
@@ -393,18 +491,26 @@ function PontoEquipe({ data, setData }) {
                 <p className="mini">Nada registrado neste dia.</p>
               ) : (
                 l.registros.map((r) => (
-                  <div key={r.id} className="entre">
-                    <span className="mini">
-                      <b>{horaCurta(r.inicioAt)} → {r.fimAt ? horaCurta(r.fimAt) : 'em aberto'}</b>
-                      {r.fimAt ? ` · ${duracao(r.duracaoMin)}` : ''}
-                      {r.lancadoPor ? ' · lançado pela gestão' : ''}
-                      {r.revisar ? ' · ⚠︎ revisar' : ''}
-                      {r.justificativa ? ` · ${r.justificativa}` : ''}
-                      <LocalBatida registro={r} />
-                    </span>
-                    <button className="btn btn-sm" onClick={() => setAjuste({ vendedor: l.vendedor, registro: r })}>
-                      Corrigir
-                    </button>
+                  <div key={r.id} className="ponto-batida">
+                    <div className="entre">
+                      <span className="mini">
+                        <b>{horaCurta(r.inicioAt)} → {r.fimAt ? horaCurta(r.fimAt) : 'em aberto'}</b>
+                        {r.fimAt ? ` · ${duracao(r.duracaoMin)}` : ''}
+                        {r.lancadoPor ? ' · lançado pela gestão' : ''}
+                        {r.revisar ? ' · ⚠︎ revisar' : ''}
+                        {r.justificativa ? ` · ${r.justificativa}` : ''}
+                      </span>
+                      <button className="btn btn-sm" onClick={() => setAjuste({ vendedor: l.vendedor, registro: r })}>
+                        Corrigir
+                      </button>
+                    </div>
+                    {/* Lançamento da gestão não passou por aparelho: não há local */}
+                    {!r.lancadoPor && (
+                      <>
+                        <LocalBatida rotulo="Entrada" local={r.inicioLocal} endereco={r.inicioEndereco} />
+                        {r.fimAt && <LocalBatida rotulo="Saída" local={r.fimLocal} endereco={r.fimEndereco} />}
+                      </>
+                    )}
                   </div>
                 ))
               )}

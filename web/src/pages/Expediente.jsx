@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { addDays, dateKey, duracao } from '../lib/date.js';
+import { distancia } from '../lib/mapa.js';
 import { Carregando, Stat, Vazio } from '../components/ui.jsx';
 
 const DIAS_NO_HISTORICO = 14;
@@ -273,7 +274,9 @@ function Local({ rotulo, local, endereco, compacto }) {
     <p className="mini">
       ⌖ {compacto ? '' : `${rotulo} em `}
       {endereco ? <b>{endereco}</b> : coordenada}
-      {local.precisao ? ` (~${local.precisao} m)` : ''}
+      {local.precisao ? ` (±${distancia(local.precisao)})` : ''}
+      {/* O gestor vê essa batida marcada: melhor o vendedor saber como evitar */}
+      {local.impreciso && ' · ⚠︎ local impreciso: ative a localização precisa do celular'}
       {local.mapa && (
         <>
           {' · '}

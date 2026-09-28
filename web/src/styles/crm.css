@@ -343,3 +343,87 @@
    rolagem dentro de rolagem é briga de dedo com a tela. */
 .lista-rolagem { max-height: 420px; overflow-y: auto; }
 @media (max-width: 899px) { .lista-rolagem { max-height: none; overflow: visible; } }
+
+/* ========================================================= PONTO (gestor) === */
+/* Mapa de ruas de verdade: imagens do OpenStreetMap posicionadas à mão e um
+   pino por batida por cima. Sem as imagens (sem internet), sobra o fundo liso
+   com os pinos no lugar. */
+.mapa-ruas {
+  position: relative; overflow: hidden; user-select: none;
+  height: clamp(260px, 44vh, 420px);
+  background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+.mapa-tiles { position: absolute; inset: 0; }
+.mapa-tiles img { position: absolute; width: 256px; height: 256px; max-width: none; }
+/* No tema escuro o mapa claro ofuscaria a tela: inverte só as ruas, não os pinos */
+:root[data-tema="escuro"] .mapa-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85); }
+
+/* Margem de erro do aparelho, em volta do ponto verdadeiro */
+.mapa-raio {
+  position: absolute; transform: translate(-50%, -50%); border-radius: 50%;
+  background: currentColor; opacity: 0.16; pointer-events: none;
+}
+
+/* Pino: iniciais do vendedor na cor dele. Cheio = entrada; vazado = saída */
+.mapa-pino {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 30px; height: 30px; padding: 0; border-radius: 99px;
+  display: grid; place-items: center;
+  font-size: 0.64rem; font-weight: 750; color: #fff;
+  border: 2px solid #fff; box-shadow: 0 2px 6px rgba(4, 7, 11, 0.4);
+  cursor: pointer; transition: transform 0.12s;
+}
+.mapa-pino.saida { background: #fff; border-width: 3px; }
+.mapa-pino:hover, .mapa-pino.ativo { z-index: 3; transform: translate(-50%, -50%) scale(1.18); }
+.mapa-pino.ativo { box-shadow: 0 0 0 4px var(--brand-foco), 0 2px 6px rgba(4, 7, 11, 0.4); }
+/* Posição estimada (sem GPS): o pino ganha a interrogação no canto */
+.mapa-pino.impreciso::after {
+  content: '?'; position: absolute; top: -6px; right: -6px;
+  width: 15px; height: 15px; border-radius: 99px; display: grid; place-items: center;
+  background: var(--orange); color: #fff; font-size: 0.58rem; font-weight: 800;
+  border: 1.5px solid #fff;
+}
+
+/* Batida imprecisa que ficou fora do recorte: atalho para o detalhe dela */
+.mapa-fora {
+  position: absolute; left: 8px; top: 8px; right: 8px; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  pointer-events: none; /* a faixa vazia não rouba o clique do pino embaixo */
+}
+.mapa-fora button {
+  pointer-events: auto;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 3px 9px; border-radius: 99px; cursor: pointer;
+  font-size: 0.68rem; font-weight: 650;
+  background: var(--surface); color: var(--alerta-fg); border: 1px solid var(--alerta-line);
+  box-shadow: var(--shadow-sm);
+}
+
+.mapa-credito {
+  position: absolute; right: 0; bottom: 0; z-index: 4;
+  padding: 1px 6px; border-top-left-radius: 6px;
+  font-size: 0.6rem; color: #333; background: rgba(255, 255, 255, 0.82);
+}
+
+.mapa-legenda i.pino-entrada { background: var(--text-2); }
+.mapa-legenda i.pino-saida { background: transparent; border: 2px solid var(--text-2); }
+.mapa-legenda i.pino-raio { background: var(--text-3); opacity: 0.35; width: 14px; height: 14px; }
+.mapa-legenda i.pino-impreciso {
+  width: 14px; height: 14px; display: grid; place-items: center; font-style: normal;
+  background: var(--orange); color: #fff; font-size: 0.56rem; font-weight: 800;
+}
+
+/* Pino aberto: quem, quando e onde, logo abaixo do mapa */
+.ponto-detalhe {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+
+/* Cada batida no cartão do vendedor: horário em cima, de onde embaixo */
+.ponto-batida { display: flex; flex-direction: column; gap: 3px; padding-top: 7px; border-top: 1px dashed var(--line); }
+.ponto-local { font-size: 0.74rem; line-height: 1.4; color: var(--text-2); overflow-wrap: anywhere; }
+.ponto-local .rotulo {
+  margin-right: 6px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.ponto-local.sem, .ponto-local.impreciso { color: var(--alerta-fg); }

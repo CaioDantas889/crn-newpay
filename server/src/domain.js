@@ -264,6 +264,14 @@ export const KPIS_DIARIOS = [
   { chave: 'maquinas',    label: 'Máquinas vendidas',       emoji: '◰', unidade: 'máquinas' },
 ];
 
+/* ------------------------------------------------------------ expediente */
+
+// Margem de erro (em metros) acima da qual a batida de ponto não diz a rua:
+// o aparelho estimou a posição pela antena ou pelo IP em vez de usar o GPS.
+// Computador sem GPS chega a ±50 km — e o endereço dessa estimativa pode cair
+// em outra cidade. O gestor vê a batida marcada como imprecisa.
+export const PRECISAO_MAXIMA_PONTO_M = 500;
+
 /* ------------------------------------------------------------ utilidades */
 
 export const isCorporate = (event) => event.scope === 'corporativo';

@@ -196,7 +196,7 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
   batida tem link para o mapa. A conversão acontece **depois** de registrar, no
   Nominatim (OpenStreetMap): a batida nunca espera pela internet, e se a
   consulta falhar o registro mantém latitude e longitude
-- É a única chamada a serviço externo do sistema; `NEWPAY_GEOCODIFICAR=false`
+- É a única chamada que o servidor faz para fora; `NEWPAY_GEOCODIFICAR=false`
   desliga e guarda só a coordenada
 - Sem GPS disponível o expediente abre do mesmo jeito, marcado como "sem
   localização", porque travar o começo do dia por causa de sinal seria pior
@@ -219,8 +219,19 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
 - **Resultado do mês**: leads gerados e trabalhados, visitas (produtivas e
   perdidas), propostas, vendas, ativações, taxa de conversão, ticket médio,
   vendas por cidade e por segmento
-- **Ponto**: quem está em campo agora, quem não bateu o ponto, horas do dia e
-  cada batida com horário, endereço e link do mapa. O gestor **corrige** horário
+- **Ponto**: quem está em campo agora, quem não bateu o ponto e horas do dia.
+  O mapa **Onde bateram o ponto** tem um pino por batida, com as iniciais e a
+  cor do vendedor — cheio na entrada, vazado na saída; tocar no pino mostra
+  quem, a que horas e em que rua. No cartão de cada vendedor, entrada e saída
+  vêm com endereço, margem de erro do aparelho e link para o mapa
+- Posição com margem de erro acima de 500 m (`PRECISAO_MAXIMA_PONTO_M` em
+  `domain.js`) aparece como **imprecisa**: é o aparelho estimando pela antena
+  ou pelo IP, sem GPS — computador chega a ±50 km, e o endereço dessa
+  estimativa pode ser de outra cidade. O vendedor vê o mesmo aviso no
+  Expediente, com a dica de ligar a localização precisa
+- As imagens das ruas vêm do OpenStreetMap, carregadas pelo navegador de quem
+  abre o painel, sem chave; sem internet os pinos aparecem sobre fundo liso
+- Na mesma aba, o gestor **corrige** horário
   errado e **lança** o expediente que ninguém bateu (celular sem bateria, sinal
   ruim) — os dois exigem motivo, que fica gravado no registro junto com o nome
   de quem mexeu. Lançamento manual aparece marcado como "lançado pela gestão",

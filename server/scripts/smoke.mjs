@@ -495,12 +495,35 @@ const painelJornada = await api('/api/jornada/equipe', { token: gestor });
 ok(painelJornada.json?.emCampo >= 1, 'gestor ve quem esta em campo', `${painelJornada.json?.emCampo} em campo`);
 ok((await api('/api/jornada/equipe', { token: vendedor })).status === 403, 'vendedor nao ve o painel de expediente');
 
+// O painel devolve cada batida do vendedor: é dela que sai o pino do mapa
+const batidaNoPainel = (painel, jornadaId) =>
+  painel.json?.linhas
+    ?.find((l) => l.vendedor.id === login.json.user.id)
+    ?.registros?.find((r) => r.id === jornadaId);
+
+const entradaNoPainel = batidaNoPainel(painelJornada, entrada.json.id);
+ok(
+  entradaNoPainel?.inicioLocal?.lat === -6.3594 && entradaNoPainel.inicioLocal.mapa?.includes('-6.3594'),
+  'gestor ve onde o vendedor bateu a entrada, com link do mapa'
+);
+ok(entradaNoPainel?.inicioLocal?.impreciso === false, 'batida com GPS (12 m) nao sai marcada como imprecisa');
+
 const saida = await api('/api/jornada/saida', { token: vendedor, method: 'POST', body: { lat: -6.36, lng: -39.3 } });
 ok(saida.status === 200 && !saida.json?.emAndamento, 'saida registrada');
 ok(typeof saida.json?.duracaoMin === 'number', 'duracao calculada', `${saida.json?.duracaoMin} min`);
 
+const saidaNoPainel = batidaNoPainel(await api('/api/jornada/equipe', { token: gestor }), saida.json.id);
+ok(saidaNoPainel?.fimLocal?.lat === -6.36 && Boolean(saidaNoPainel.fimLocal.mapa), 'gestor ve onde o vendedor bateu a saida');
+
 const semGps = await api('/api/jornada/entrada', { token: vendedor, method: 'POST', body: {} });
 ok(semGps.json?.inicioLocal === null, 'sem GPS o expediente abre mesmo assim, marcado');
+await api('/api/jornada/saida', { token: vendedor, method: 'POST', body: {} });
+
+// Computador sem GPS estima pelo IP: ±50 km, e o endereço pode ser outra cidade
+const porIp = await api('/api/jornada/entrada', {
+  token: vendedor, method: 'POST', body: { lat: -3.8195, lng: -38.5843, precisao: 50000 },
+});
+ok(porIp.json?.inicioLocal?.impreciso === true, 'posicao estimada (±50 km) chega marcada como imprecisa');
 await api('/api/jornada/saida', { token: vendedor, method: 'POST', body: {} });
 
 ok(

@@ -55,15 +55,19 @@ export const Stat = ({ valor, rotulo, extra, destaque, cor }) => (
   </div>
 );
 
+/** "Carlos Souza" → "CS" */
+export const iniciais = (nome = '?') =>
+  nome
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase();
+
 export const Avatar = ({ nome = '?', cor = '#334155', pequeno }) => (
   <div className={`avatar${pequeno ? ' avatar-sm' : ''}`} style={{ background: cor }}>
-    {nome
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0])
-      .join('')
-      .toUpperCase()}
+    {iniciais(nome)}
   </div>
 );
 
