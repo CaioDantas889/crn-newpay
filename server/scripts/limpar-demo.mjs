@@ -48,7 +48,7 @@ if (!['seed', 'tudo'].includes(MODO)) {
 }
 
 // Ids fixos que o seed usa para a equipe de demonstração
-const VENDEDORES_DEMO = ['usr_carlos', 'usr_fernanda', 'usr_rafael', 'usr_juliana'];
+const VENDEDORES_DEMO = ['usr_carlos', 'usr_fernanda', 'usr_rafael', 'usr_juliana', 'usr_onboarding'];
 const GESTOR_DEMO = 'usr_gestor';
 
 /* ------------------------------------------------------------- trava ---- */
@@ -93,6 +93,13 @@ const CAMPOS = {
   tasks: 'ownerId',
   visits: 'userId',
   deals: 'userId',
+  followups: 'userId',
+  whatsappAberturas: 'userId',
+  auditorias: 'vendedorId',
+  ocorrencias: 'vendedorId',
+  sorteiosAuditoria: 'feitoPor',
+  termosConduta: 'publicadoPor',
+  aceitesTermo: 'userId',
   goals: 'userId',
   dailyKpis: 'userId',
   confirmations: 'userId',
@@ -102,7 +109,10 @@ const CAMPOS = {
 };
 
 // A operação em si: o que some por inteiro no modo "tudo"
-const OPERACAO = ['clients', 'visits', 'deals', 'events', 'tasks', 'goals', 'dailyKpis', 'confirmations'];
+const OPERACAO = [
+  'clients', 'visits', 'deals', 'events', 'tasks', 'goals', 'dailyKpis', 'confirmations',
+  'followups', 'whatsappAberturas', 'auditorias', 'ocorrencias', 'sorteiosAuditoria',
+];
 
 const dataDe = (linha) => linha.createdAt ?? linha.at ?? linha.start ?? null;
 const antesDoCorte = (linha) => {
@@ -120,6 +130,10 @@ function ehDemo(tabela, linha) {
   // Cliente é o caso fácil: o id diz a origem, sem depender de data nem de
   // quem cadastrou. Cliente que você criou pelo app fica, ponto.
   if (tabela === 'clients') return clientesDoSeed.has(linha.id);
+
+  // O termo do seed é texto de demonstração; o que a gestão publicou fica
+  if (tabela === 'termosConduta') return linha.demo === true;
+  if (tabela === 'aceitesTermo') return linha.termoId === 'trm_demo';
 
   // Preso a um cliente: segue o destino dele. Não faz sentido guardar visita
   // de um cliente que deixou de existir, nem apagar visita de cliente que fica.
@@ -175,7 +189,10 @@ const inativosVazios = LIMPAR_INATIVOS
 const idsQueSaem = new Set([...usuariosDemo, ...inativosVazios].map((u) => u.id));
 
 // Papelada que só faz sentido junto da pessoa: sai com ela.
-const PAPELADA = ['goals', 'dailyKpis', 'confirmations', 'announcementReads', 'notificationState', 'activity'];
+const PAPELADA = [
+  'goals', 'dailyKpis', 'confirmations', 'announcementReads', 'notificationState', 'activity',
+  'aceitesTermo', 'whatsappAberturas',
+];
 for (const tabela of PAPELADA) {
   for (const linha of table(tabela)) {
     if (idsQueSaem.has(linha[CAMPOS[tabela]]) && !alvos[tabela].includes(linha)) {
@@ -189,7 +206,7 @@ for (const tabela of PAPELADA) {
  * vai embora — o caso de um cliente cadastrado por você usando a conta de
  * demonstração. Isso não se apaga: passa para quem fica.
  */
-const TRANSFERIVEIS = ['clients', 'visits', 'deals', 'events', 'tasks'];
+const TRANSFERIVEIS = ['clients', 'visits', 'deals', 'events', 'tasks', 'followups'];
 
 const alvoTransferencia = (() => {
   const escolhido = arg('transferir-para').toLowerCase();
@@ -229,6 +246,13 @@ const rotulos = {
   tasks: 'tarefas',
   visits: 'visitas',
   deals: 'propostas e vendas',
+  followups: 'follow-ups da cadência',
+  whatsappAberturas: 'aberturas de WhatsApp',
+  auditorias: 'auditorias',
+  ocorrencias: 'ocorrências',
+  sorteiosAuditoria: 'sorteios de auditoria',
+  termosConduta: 'termo de conduta (demonstração)',
+  aceitesTermo: 'aceites do termo',
   goals: 'metas mensais',
   dailyKpis: 'fechamentos de dia',
   confirmations: 'confirmações de presença',

@@ -52,6 +52,10 @@ export const config = {
   geocodificar: booleano(process.env.NEWPAY_GEOCODIFICAR, true),
   contatoGeocodificacao: texto(process.env.NEWPAY_CONTATO, 'crm@newpay.com.br'),
 
+  // Lead remoto: CNPJ consultado na Receita pela BrasilAPI (sem chave). Em
+  // servidor sem internet, false confere só os dígitos verificadores.
+  consultarCnpj: booleano(process.env.NEWPAY_CONSULTAR_CNPJ, true),
+
   // Origens liberadas no CORS. Vazio = só mesma origem (front servido aqui).
   origens: lista(process.env.NEWPAY_ORIGINS),
 

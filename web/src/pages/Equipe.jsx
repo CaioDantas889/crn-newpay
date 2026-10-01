@@ -10,6 +10,8 @@ import TrocarSenha from '../components/TrocarSenha.jsx';
 
 const PAPEIS = {
   vendedor: { rotulo: 'Vendedor', cargoPadrao: 'Consultor Externo' },
+  // Faz as ligações da auditoria semanal: não vende nem gerencia
+  onboarding: { rotulo: 'Onboarding', cargoPadrao: 'Onboarding' },
   gestor: { rotulo: 'Gestor', cargoPadrao: 'Gerente Comercial' },
   diretoria: { rotulo: 'Diretoria', cargoPadrao: 'Diretor Comercial' },
 };
@@ -22,6 +24,7 @@ const VAZIO = {
   city: '',
   phone: '',
   dailyGoal: 8,
+  raioRegiaoKm: 0,
 };
 
 export default function Equipe() {
@@ -180,6 +183,7 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
         city: form.city,
         phone: form.phone,
         dailyGoal: Number(form.dailyGoal) || 0,
+        raioRegiaoKm: Number(form.raioRegiaoKm) || 0,
       };
 
       if (novo) {
@@ -268,6 +272,17 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
           </div>
         )}
       </div>
+
+      {form.role === 'vendedor' && (
+        <div className="campo">
+          <label htmlFor="eq-raio">Raio da região (km)</label>
+          <input id="eq-raio" className="input" type="number" min="0" max="500" {...campo('raioRegiaoKm')} placeholder="60" />
+          <span className="mini">
+            Visita registrada além dessa distância da base do vendedor vira alerta para a gestão.
+            Em branco ou 0 vale o padrão de 60 km. A meta de leads é a mesma para todos: 30 por dia.
+          </span>
+        </div>
+      )}
     </Modal>
   );
 }

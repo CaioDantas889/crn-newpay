@@ -32,6 +32,12 @@ COPY --from=front /app/web/dist ./web/dist
 ENV NEWPAY_DATA_DIR=/data \
     API_PORT=4000
 
+# "Hoje", os lembretes de ritmo (8h, 11h, 15h, 18h) e o resumo das 19h seguem
+# o relógio do servidor. Sem isto o container roda em UTC e o dia viraria às
+# 21h de Iguatu.
+RUN apk add --no-cache tzdata
+ENV TZ=America/Fortaleza
+
 RUN mkdir -p /data && chown -R node:node /data /app
 
 # O processo não roda como root: se alguém escapar do Node, escapa sem poder.

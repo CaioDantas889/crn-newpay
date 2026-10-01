@@ -5,19 +5,20 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
-import { dateKey, moeda } from '../lib/date.js';
+import { dateKey, duracao } from '../lib/date.js';
 import { aplicarTema, outroTema, temaPreferido } from '../lib/tema.js';
 import { Avatar, Vazio } from './ui.jsx';
 import NotificacoesPainel from './NotificacoesPainel.jsx';
 import RegistrarVisita from './RegistrarVisita.jsx';
 import NovoCliente from './NovoCliente.jsx';
+import NovoLead from './NovoLead.jsx';
 import EventoModal from './EventoModal.jsx';
 
 const railClasse = ({ isActive }) => `rail-item${isActive ? ' ativo' : ''}`;
 const bottomClasse = ({ isActive }) => (isActive ? 'ativo' : undefined);
 
 export default function AppShell() {
-  const { user, sair, notificacoes, ehGestor } = useApp();
+  const { user, sair, notificacoes, placar, ehGestor, ehVendedor, ehOnboarding } = useApp();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [parametros, setParametros] = useSearchParams();
@@ -68,37 +69,51 @@ export default function AppShell() {
     navigate(`/carteira/${id}`);
   };
 
-  const acoesNovo = [
-    { chave: 'visita', emoji: '✓', label: 'Registrar visita' },
-    { chave: 'cliente', emoji: '◇', label: 'Novo cliente' },
-    { chave: 'compromisso', emoji: '▤', label: 'Novo compromisso' },
-  ];
+  // Vendedor cadastra lead com prova; a gestão cadastra cliente direto na
+  // carteira (sem prova, não conta na meta de ninguém).
+  const acoesNovo = ehOnboarding
+    ? [{ chave: 'compromisso', emoji: '▤', label: 'Novo compromisso' }]
+    : [
+        { chave: 'cliente', emoji: '◇', label: ehGestor ? 'Novo cliente' : 'Novo lead' },
+        { chave: 'visita', emoji: '✓', label: 'Registrar visita' },
+        { chave: 'compromisso', emoji: '▤', label: 'Novo compromisso' },
+      ];
 
   return (
     <div className="app">
       <aside className="rail">
         <div className="marca logo-npb" role="img" aria-label="NewPay Bank" title="NewPay CRM" />
 
-        <NavLink to="/" end className={railClasse}>
-          <span className="ico">⌂</span> Início
-        </NavLink>
-        <NavLink to="/pipeline" className={railClasse}>
-          <span className="ico">▦</span> Pipeline
-        </NavLink>
-        <NavLink to={`/dia/${hoje}`} className={railClasse}>
-          <span className="ico">▤</span> Agenda
-        </NavLink>
-        <NavLink to="/expediente" className={railClasse}>
-          <span className="ico">◷</span> Expediente
-        </NavLink>
-        <NavLink to="/carteira" className={railClasse}>
-          <span className="ico">◇</span> Carteira
-        </NavLink>
-        <NavLink to="/ranking" className={railClasse}>
-          <span className="ico">★</span> Ranking
-        </NavLink>
+        {!ehOnboarding && (
+          <>
+            <NavLink to="/" end className={railClasse}>
+              <span className="ico">⌂</span> {ehGestor ? 'Início' : 'Hoje'}
+            </NavLink>
+            <NavLink to="/pipeline" className={railClasse}>
+              <span className="ico">▦</span> Pipeline
+            </NavLink>
+            <NavLink to={`/dia/${hoje}`} className={railClasse}>
+              <span className="ico">▤</span> Agenda
+            </NavLink>
+            <NavLink to="/expediente" className={railClasse}>
+              <span className="ico">◷</span> Expediente
+            </NavLink>
+            <NavLink to="/carteira" className={railClasse}>
+              <span className="ico">◇</span> Carteira
+            </NavLink>
+            <NavLink to="/ranking" className={railClasse}>
+              <span className="ico">★</span> Ranking
+            </NavLink>
 
-        <div className="rail-sep" />
+            <div className="rail-sep" />
+          </>
+        )}
+
+        {(ehGestor || ehOnboarding) && (
+          <NavLink to="/auditoria" className={railClasse}>
+            <span className="ico">◈</span> Auditoria
+          </NavLink>
+        )}
 
         {ehGestor && (
           <>
@@ -125,7 +140,9 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className={`main${ehGestor ? '' : ' com-fab'}`}>
+      <div className={`main${ehVendedor ? ' com-fab' : ''}`}>
+        {/* Topbar e placar rolam juntos: o placar fica à vista em qualquer tela */}
+        <div className="topo-fixo">
         <header className="topbar-crm">
           <div className="busca-global" ref={caixaBusca}>
             <span className="lupa">⌕</span>
@@ -204,26 +221,69 @@ export default function AppShell() {
           </div>
         </header>
 
+        {/* A meta não pode ser esquecida: o placar do dia acompanha o vendedor em todas as telas */}
+        {ehVendedor && placar?.diaDeTrabalho && (
+          <button
+            type="button"
+            className={`placar-faixa${placar.metaBatida ? ' batida' : ''}`}
+            onClick={() => navigate('/')}
+            title="Abrir a tela Hoje"
+          >
+            <span className="placar-faixa-texto">
+              <b>Hoje: {placar.total}/{placar.meta}</b>
+              <span>{placar.presenciais} presenciais · {placar.remotos} remotos</span>
+              {placar.pendentes > 0 && <span className="pendente">{placar.pendentes} pendente(s)</span>}
+              <span>
+                {placar.metaBatida
+                  ? 'meta batida ★'
+                  : placar.faltam > 0
+                    ? `faltam ${placar.faltam}`
+                    : `faltam ${placar.faltamPresenciais} presenciais`}
+              </span>
+              {!placar.metaBatida && (
+                <span>{placar.minutosRestantes > 0 ? `${duracao(placar.minutosRestantes)} restantes` : 'dia encerrado'}</span>
+              )}
+              {placar.atrasados > 0 && <span className="atrasado">{placar.atrasados} follow-up(s) atrasado(s)</span>}
+            </span>
+            <span className="placar-faixa-barra"><i style={{ width: `${placar.percentual}%` }} /></span>
+          </button>
+        )}
+        </div>
+
         {painelAberto && <NotificacoesPainel onFechar={() => setPainelAberto(false)} />}
 
         <Outlet
           context={{
             abrirRegistroVisita: () => setModal('visita'),
             abrirNovoCliente: () => setModal('cliente'),
+            abrirNovoLead: () => setModal('cliente'),
             busca,
           }}
         />
       </div>
 
-      {!ehGestor && (
-        <button className="fab" onClick={() => setModal('visita')}>✓ Visitei</button>
+      {/* Lead novo é a ação principal do dia; "Visitei" registra a revisita de quem já está na base */}
+      {ehVendedor && (
+        <div className="fab-grupo">
+          <button className="fab fab-secundario" onClick={() => setModal('visita')}>✓ Visitei</button>
+          <button className="fab" onClick={() => setModal('cliente')}>+ Lead</button>
+        </div>
       )}
 
       <nav className="bottom-nav">
-        <NavLink to="/" end className={bottomClasse}><span className="ico">⌂</span> Início</NavLink>
-        <NavLink to="/pipeline" className={bottomClasse}><span className="ico">▦</span> Pipeline</NavLink>
-        <NavLink to={`/dia/${hoje}`} className={bottomClasse}><span className="ico">▤</span> Agenda</NavLink>
-        <NavLink to="/carteira" className={bottomClasse}><span className="ico">◇</span> Carteira</NavLink>
+        {ehOnboarding ? (
+          <>
+            <NavLink to="/auditoria" className={bottomClasse}><span className="ico">◈</span> Auditoria</NavLink>
+            <NavLink to="/avisos" className={bottomClasse}><span className="ico">⚑︎</span> Avisos</NavLink>
+          </>
+        ) : (
+          <>
+            <NavLink to="/" end className={bottomClasse}><span className="ico">⌂</span> {ehGestor ? 'Início' : 'Hoje'}</NavLink>
+            <NavLink to="/pipeline" className={bottomClasse}><span className="ico">▦</span> Pipeline</NavLink>
+            <NavLink to={`/dia/${hoje}`} className={bottomClasse}><span className="ico">▤</span> Agenda</NavLink>
+            <NavLink to="/carteira" className={bottomClasse}><span className="ico">◇</span> Carteira</NavLink>
+          </>
+        )}
         <NavLink to="/mais" className={bottomClasse}>
           <span className="ico">⋯</span> Mais
           {notificacoes.itens.some((n) => n.kind === 'nova_campanha' || n.kind === 'aviso_nao_lido') && (
@@ -233,11 +293,14 @@ export default function AppShell() {
       </nav>
 
       {modal === 'visita' && <RegistrarVisita onFechar={() => setModal(null)} />}
-      {modal === 'cliente' && (
+      {modal === 'cliente' && ehGestor && (
         <NovoCliente
           onFechar={() => setModal(null)}
           onCriado={(cliente) => navigate(`/carteira/${cliente.id}?diagnostico=1`)}
         />
+      )}
+      {modal === 'cliente' && !ehGestor && (
+        <NovoLead onFechar={() => setModal(null)} />
       )}
       {modal === 'compromisso' && (
         <EventoModal

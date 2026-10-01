@@ -21,6 +21,10 @@ services:
       NEWPAY_HORAS_SESSAO: ${NEWPAY_HORAS_SESSAO:-720}
       NEWPAY_GEOCODIFICAR: ${NEWPAY_GEOCODIFICAR:-true}
       NEWPAY_CONTATO: ${NEWPAY_CONTATO:-crm@newpay.com.br}
+      # Fuso da operação: define o "hoje" da meta e a hora dos lembretes
+      TZ: ${TZ:-America/Fortaleza}
+      # Lead remoto: CNPJ conferido na Receita (BrasilAPI). false = só os dígitos
+      NEWPAY_CONSULTAR_CNPJ: ${NEWPAY_CONSULTAR_CNPJ:-true}
       # Usados só quando o banco ainda não existe (primeiro gestor)
       NEWPAY_ADMIN_NOME: ${NEWPAY_ADMIN_NOME:-}
       NEWPAY_ADMIN_EMAIL: ${NEWPAY_ADMIN_EMAIL:-}

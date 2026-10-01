@@ -19,7 +19,12 @@ import {
 const router = Router();
 router.use(requireAuth, requireRole('gestor', 'diretoria'));
 
-const PAPEIS = ['vendedor', 'gestor', 'diretoria'];
+// Onboarding faz as ligações da auditoria semanal: não vende nem gerencia
+const PAPEIS = ['vendedor', 'onboarding', 'gestor', 'diretoria'];
+const CARGOS = { vendedor: 'Consultor Externo', onboarding: 'Onboarding', gestor: 'Gestor', diretoria: 'Diretoria' };
+
+/** Raio da região do vendedor, em km (visita além disso vira alerta); 0 = padrão */
+const raioRegiao = (valor) => Math.min(500, Math.max(0, Math.round(Number(valor) || 0)));
 const CORES = ['#2563eb', '#db2777', '#ea580c', '#0d9488', '#7c3aed', '#0891b2', '#b45309', '#16a34a'];
 
 const normalizarEmail = (valor) => String(valor ?? '').trim().toLowerCase();
@@ -50,7 +55,7 @@ router.post('/', (req, res) => {
   if (emailEmUso(email)) return res.status(409).json({ error: 'Já existe alguém com esse e-mail.' });
 
   const role = PAPEIS.includes(b.role) ? b.role : 'vendedor';
-  if (role !== 'vendedor' && req.user.role !== 'diretoria' && req.user.role !== 'gestor') {
+  if (!['vendedor', 'onboarding'].includes(role) && req.user.role !== 'diretoria' && req.user.role !== 'gestor') {
     return res.status(403).json({ error: 'Apenas a gestão cria outro gestor.' });
   }
 
@@ -69,11 +74,12 @@ router.post('/', (req, res) => {
     email,
     password: hashPassword(senha),
     role,
-    jobTitle: String(b.jobTitle ?? '').trim() || (role === 'vendedor' ? 'Consultor Externo' : 'Gestor'),
+    jobTitle: String(b.jobTitle ?? '').trim() || CARGOS[role],
     city: String(b.city ?? req.user.city ?? '').trim(),
     phone: String(b.phone ?? '').trim(),
     color: b.color ?? CORES[table('users').length % CORES.length],
     dailyGoal: role === 'vendedor' ? Number(b.dailyGoal) || 8 : 0,
+    raioRegiaoKm: raioRegiao(b.raioRegiaoKm),
     active: true,
     base,
     mustChangePassword: true,
@@ -96,6 +102,7 @@ router.patch('/:id', (req, res) => {
     if (campo in b) patch[campo] = String(b[campo] ?? '').trim();
   }
   if ('dailyGoal' in b) patch.dailyGoal = Math.max(0, Number(b.dailyGoal) || 0);
+  if ('raioRegiaoKm' in b) patch.raioRegiaoKm = raioRegiao(b.raioRegiaoKm);
   if (b.base) {
     patch.base = { lat: Number(b.base.lat) || 0, lng: Number(b.base.lng) || 0 };
   }
@@ -112,7 +119,7 @@ router.patch('/:id', (req, res) => {
     if (usuario.id === req.user.id && b.role !== req.user.role) {
       return res.status(400).json({ error: 'Você não pode mudar o próprio papel.' });
     }
-    if (isManager(usuario) && b.role === 'vendedor' && gestoresAtivos().length <= 1) {
+    if (isManager(usuario) && !['gestor', 'diretoria'].includes(b.role) && gestoresAtivos().length <= 1) {
       return res.status(400).json({ error: 'A operação precisa de pelo menos um gestor.' });
     }
     patch.role = b.role;
@@ -163,6 +170,9 @@ const VINCULOS = [
   { tabela: 'deals', campo: 'userId', rotulo: 'propostas e vendas', transfere: true },
   { tabela: 'events', campo: 'ownerId', rotulo: 'compromissos na agenda', transfere: true },
   { tabela: 'tasks', campo: 'ownerId', rotulo: 'tarefas', transfere: true },
+  { tabela: 'followups', campo: 'userId', rotulo: 'follow-ups da cadência', transfere: true },
+  { tabela: 'whatsappAberturas', campo: 'userId', rotulo: 'aberturas de WhatsApp', transfere: false },
+  { tabela: 'aceitesTermo', campo: 'userId', rotulo: 'aceites do Termo de Conduta', transfere: false },
   { tabela: 'goals', campo: 'userId', rotulo: 'metas mensais', transfere: false },
   { tabela: 'dailyKpis', campo: 'userId', rotulo: 'fechamentos de dia', transfere: false },
   { tabela: 'confirmations', campo: 'userId', rotulo: 'confirmações de presença', transfere: false },

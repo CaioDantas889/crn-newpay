@@ -7,6 +7,7 @@ import './styles/base.css';
 import './styles/modules.css';
 import './styles/crm.css';
 import './styles/pipeline.css';
+import './styles/leads.css';
 
 // Service worker só no build de produção: em desenvolvimento ele brigaria com o
 // hot reload do Vite e esconderia mudança de código atrás do cache.

@@ -1,0 +1,168 @@
+/* ============================================================================
+   Meta diária, follow-up e anti-fantasma: o placar que acompanha o vendedor,
+   o cadastro de lead com prova, a cadência e o semáforo do gestor.
+   Só usa os tokens de base.css — claro e escuro vêm de graça.
+   ========================================================================= */
+
+/* ------------------------------------------------- placar em todas as telas */
+.placar-faixa {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: none; border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome); color: var(--chrome-text);
+  padding: 7px 12px 0;
+}
+.topo-fixo { position: sticky; top: 0; z-index: 30; }
+.topo-fixo .topbar-crm { position: static; }
+.placar-faixa-texto {
+  display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap;
+  font-size: 0.74rem; font-weight: 600;
+}
+.placar-faixa-texto b { font-size: 0.92rem; font-weight: 750; color: var(--chrome-text-forte); }
+.placar-faixa-texto .pendente { color: var(--text-3); }
+.placar-faixa-texto .atrasado { color: var(--red); font-weight: 700; }
+.placar-faixa-barra {
+  display: block; height: 4px; margin: 6px -12px 0; background: var(--line);
+}
+.placar-faixa-barra i { display: block; height: 100%; background: var(--brand); transition: width 0.4s ease; }
+.placar-faixa.batida .placar-faixa-barra i { background: var(--green); }
+.placar-faixa.batida .placar-faixa-texto b { color: var(--green); }
+
+/* --------------------------------------------- botões flutuantes do vendedor */
+.fab-grupo {
+  position: fixed; right: 16px; bottom: calc(var(--nav-h) + 16px); z-index: 45;
+  display: flex; gap: 8px; align-items: center;
+}
+.fab-grupo .fab { position: static; }
+.fab.fab-secundario {
+  background: var(--surface); color: var(--text); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+}
+@media (min-width: 900px) { .fab-grupo { bottom: 22px; right: 22px; } }
+
+/* --------------------------------------------------------- cadastro de lead */
+.aviso-fantasma {
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--erro-bg); color: var(--erro-fg); border: 1px solid var(--erro-line);
+  font-size: 0.78rem; font-weight: 700;
+}
+
+.origem-lead { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.origem-lead .opcao {
+  border-radius: var(--radius-sm); padding: 9px 10px; text-align: left;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.origem-lead .opcao b { font-size: 0.9rem; }
+.origem-lead .opcao small { font-size: 0.7rem; font-weight: 500; opacity: 0.8; }
+
+@media (min-width: 620px) { .form-linha.tres { grid-template-columns: 1fr 1fr 1fr; } }
+
+/* Fechou · Quente · Morno · Frio · Sem CNPJ · Não atendeu */
+.resultados.seis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.resultados.seis .resultado-btn { padding: 9px 4px; font-size: 0.8rem; }
+.resultados.seis .resultado-btn .emoji { font-size: 1.1rem; }
+
+.camera { display: flex; flex-direction: column; gap: 8px; }
+.camera-video, .camera-foto {
+  width: 100%; max-height: 260px; object-fit: cover; border-radius: var(--radius-sm);
+  background: #000; border: 1px solid var(--line);
+}
+.camera-abrir {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 62px; padding: 10px; cursor: pointer;
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-2); font-weight: 650; font-size: 0.84rem;
+}
+.camera-abrir:hover { border-color: var(--brand); color: var(--brand-strong); }
+.camera-abrir .emoji { font-size: 1.2rem; }
+
+.receita-ok {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px;
+  border-radius: var(--radius-sm); background: var(--ok-bg); border: 1px solid var(--ok-line);
+}
+.receita-ok b { font-size: 0.84rem; color: var(--ok-fg); }
+
+.marcacao { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.8rem; line-height: 1.35; }
+.marcacao input { width: 18px; height: 18px; margin-top: 1px; flex: none; accent-color: var(--brand); }
+.marcacao.declaracao {
+  padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2);
+  font-weight: 600;
+}
+
+.print-escolhido { display: flex; gap: 10px; align-items: flex-start; }
+.anexo-miniatura.grande { width: 96px; height: 96px; flex: none; }
+
+button.cliente-linha {
+  width: 100%; border-left: none; border-right: none; border-top: none;
+  background: none; text-align: left; font: inherit; color: inherit;
+}
+.cliente-linha.escolhido { background: var(--brand-soft); }
+
+/* ------------------------------------------------------------- tela "Hoje" */
+.card.card-atrasados { border-color: var(--erro-line); }
+.card.card-atrasados > .card-header { background: var(--erro-bg); }
+.card.card-atrasados > .card-header h2 { color: var(--erro-fg); }
+
+.followups { display: flex; flex-direction: column; }
+.followup {
+  display: flex; flex-direction: column; gap: 7px; padding: 10px 12px;
+  border-bottom: 1px solid var(--line); border-left: 3px solid var(--yellow);
+}
+.followup:last-child { border-bottom: none; }
+.followup.atrasado { border-left-color: var(--red); background: var(--erro-bg); }
+.followup-topo { display: flex; align-items: center; gap: 9px; }
+.followup-selo {
+  flex: none; min-width: 44px; padding: 4px 6px; border-radius: 8px; text-align: center;
+  background: var(--acao); color: var(--acao-text); font-size: 0.7rem; font-weight: 750;
+}
+.followup.atrasado .followup-selo { background: var(--red); color: #fff; }
+.followup-loja { display: block; font-weight: 700; font-size: 0.9rem; color: var(--text); text-decoration: none; }
+.followup-loja:hover { color: var(--brand-strong); }
+.followup-texto {
+  font-size: 0.78rem; line-height: 1.45; color: var(--text-2); white-space: pre-wrap;
+  padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line);
+}
+.followup-texto.roteiro { padding-left: 26px; display: flex; flex-direction: column; gap: 4px; }
+.followup-acoes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.followup-acoes .btn-brand { margin-left: auto; }
+
+/* Status do lead na meta */
+.chip-status { text-transform: capitalize; }
+.chip-status.validado { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--ok-line); }
+.chip-status.pendente { background: var(--neutro-bg); color: var(--neutro-fg); border-color: var(--neutro-line); }
+.chip-status.suspeito { background: var(--alerta-bg); color: var(--alerta-fg); border-color: var(--alerta-line); }
+.chip-status.fantasma { background: var(--erro-bg); color: var(--erro-fg); border-color: var(--erro-line); }
+
+/* Remoto que ainda não conta aparece em cinza */
+.lead-cinza .info b { color: var(--text-3); }
+
+.lead-aviso { display: flex; flex-direction: column; gap: 3px; }
+.lead-aviso.pendente { background: var(--neutro-bg); border-color: var(--neutro-line); }
+.lead-aviso.suspeito { background: var(--alerta-bg); border-color: var(--alerta-line); }
+.lead-aviso.suspeito b { color: var(--alerta-fg); }
+.lead-aviso.fantasma { background: var(--erro-bg); border-color: var(--erro-line); }
+.lead-aviso.fantasma b { color: var(--erro-fg); }
+
+/* ------------------------------------------------------ semáforo do gestor */
+.tabela-semaforo td { vertical-align: top; }
+.tabela-semaforo .mini { white-space: nowrap; }
+.linha-semaforo { cursor: pointer; }
+.linha-semaforo:hover td { background: var(--surface-2); }
+.linha-semaforo.vermelho td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.linha-semaforo.amarelo td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
+.linha-semaforo.verde td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.linha-semaforo td:first-child { min-width: 220px; }
+.linha-semaforo td:first-child .mini { white-space: normal; }
+.farol { width: 12px; height: 12px; border-radius: 99px; flex: none; box-shadow: 0 0 0 3px var(--surface-2); }
+
+.alerta-suspeita {
+  display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px; border-bottom: 1px solid var(--line);
+}
+.alerta-suspeita:last-child { border-bottom: none; }
+
+/* -------------------------------------------------------- termo de conduta */
+.login-card.termo-card { max-width: 560px; width: 100%; }
+.termo-texto {
+  max-height: 44vh; overflow-y: auto; white-space: pre-wrap; font-size: 0.84rem; line-height: 1.55;
+  padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2);
+}
+.termo-editor { min-height: 300px; font-size: 0.82rem; line-height: 1.5; }

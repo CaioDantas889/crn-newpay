@@ -9,6 +9,7 @@ import { dateKey, duracao, hora, moeda, pad } from '../lib/date.js';
 import { distancia } from '../lib/mapa.js';
 import { Avatar, Carregando, Modal, Progresso, Stat, Vazio, iniciais } from '../components/ui.jsx';
 import MapaPonto from '../components/MapaPonto.jsx';
+import SemaforoEquipe from '../components/SemaforoEquipe.jsx';
 
 const SITUACOES = {
   em_reuniao: '■︎ Em reunião',
@@ -22,7 +23,7 @@ const SITUACOES = {
 
 export default function PainelGestor() {
   const navigate = useNavigate();
-  const [aba, setAba] = useState('hoje');
+  const [aba, setAba] = useState('semaforo');
   const [data, setData] = useState(dateKey());
 
   const { dados: visao, carregando } = useRecurso(() => endpoints.visaoGeral(data), [data]);
@@ -39,17 +40,24 @@ export default function PainelGestor() {
       <div className="entre">
         <div>
           <h1>Painel do gestor</h1>
-          <p className="mini">Execução da equipe e resultado comercial.</p>
+          <p className="mini">Meta diária, execução da equipe e resultado comercial.</p>
         </div>
-        <button className="btn" onClick={() => navigate('/avisos')}>⚑︎ Publicar comunicado</button>
+        <div className="linha">
+          <button className="btn" onClick={() => navigate('/auditoria')}>◈ Auditoria</button>
+          <button className="btn" onClick={() => navigate('/avisos')}>⚑︎ Publicar comunicado</button>
+        </div>
       </div>
 
       <div className="abas">
+        <button className={`aba${aba === 'semaforo' ? ' ativa' : ''}`} onClick={() => setAba('semaforo')}>Semáforo</button>
         <button className={`aba${aba === 'hoje' ? ' ativa' : ''}`} onClick={() => setAba('hoje')}>Execução do dia</button>
         <button className={`aba${aba === 'ponto' ? ' ativa' : ''}`} onClick={() => setAba('ponto')}>Ponto</button>
         <button className={`aba${aba === 'resultado' ? ' ativa' : ''}`} onClick={() => setAba('resultado')}>Resultado do mês</button>
         <button className={`aba${aba === 'kpis' ? ' ativa' : ''}`} onClick={() => setAba('kpis')}>Registro diário</button>
       </div>
+
+      {/* ==================================================== SEMÁFORO === */}
+      {aba === 'semaforo' && <SemaforoEquipe data={data} setData={setData} />}
 
       {/* ============================================ EXECUÇÃO DO DIA ==== */}
       {aba === 'hoje' && (

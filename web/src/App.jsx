@@ -18,10 +18,12 @@ import Expediente from './pages/Expediente.jsx';
 import Mais from './pages/Mais.jsx';
 import Equipe from './pages/Equipe.jsx';
 import PainelGestor from './pages/PainelGestor.jsx';
+import Auditoria from './pages/Auditoria.jsx';
+import AceiteTermo from './components/AceiteTermo.jsx';
 import { TrocaObrigatoria } from './components/TrocarSenha.jsx';
 
 export default function App() {
-  const { user, carregando, ehGestor, toasts } = useApp();
+  const { user, carregando, ehGestor, ehOnboarding, toasts } = useApp();
 
   const avisosFlutuantes = (
     <div className="toasts">
@@ -70,12 +72,29 @@ export default function App() {
     );
   }
 
+  // Primeiro acesso (ou termo novo): o vendedor aceita o Termo de Conduta
+  // antes de qualquer cadastro. O aceite fica gravado com data, hora e login.
+  if (user.termoPendente) {
+    return (
+      <>
+        <AceiteTermo />
+        {avisosFlutuantes}
+      </>
+    );
+  }
+
+  const inicio = ehGestor
+    ? <Navigate to="/gestor" replace />
+    : ehOnboarding
+      ? <Navigate to="/auditoria" replace />
+      : <Inicio />;
+
   return (
     <>
       <Routes>
         <Route element={<AppShell />}>
-          {/* O gestor entra direto no painel da equipe */}
-          <Route path="/" element={ehGestor ? <Navigate to="/gestor" replace /> : <Inicio />} />
+          {/* O gestor entra direto no painel da equipe; o onboarding, na fila da auditoria */}
+          <Route path="/" element={inicio} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/calendario" element={<Calendario />} />
           <Route path="/dia" element={<AgendaDia />} />
@@ -95,6 +114,10 @@ export default function App() {
           <Route
             path="/gestor"
             element={ehGestor ? <PainelGestor /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/auditoria"
+            element={ehGestor || ehOnboarding ? <Auditoria /> : <Navigate to="/" replace />}
           />
           <Route
             path="/equipe"

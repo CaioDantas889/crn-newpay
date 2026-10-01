@@ -135,6 +135,9 @@ export default function Carteira() {
                     <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                     <span className="mini truncar" style={{ display: 'block' }}>
                       {c.segmentoLabel} · {c.city}
+                      {c.leadStatus && c.leadStatus !== 'validado' && (
+                        <span className={`chip chip-status ${c.leadStatus}`} style={{ marginLeft: 6 }}>{c.leadStatus}</span>
+                      )}
                     </span>
                   </div>
                   <div className="etapa">

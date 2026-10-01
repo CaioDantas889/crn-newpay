@@ -24,6 +24,10 @@ import announcementRoutes from './routes/announcements.js';
 import notificationRoutes from './routes/notifications.js';
 import jornadaRoutes from './routes/jornada.js';
 import managerRoutes from './routes/manager.js';
+import followupRoutes from './routes/followups.js';
+import auditoriaRoutes from './routes/auditoria.js';
+import { migrar } from './migracoes.js';
+import { garantirSorteioDaSemana } from './auditoria.js';
 
 /* ------------------------------------------------- checagens de ambiente */
 
@@ -52,6 +56,19 @@ try {
   process.exit(1);
 }
 load();
+migrar();
+
+// Sorteio da auditoria: toda segunda. O relógio de hora em hora cobre o
+// servidor que ficou no ar o fim de semana inteiro; a própria tela da
+// auditoria também confere ao abrir.
+garantirSorteioDaSemana();
+setInterval(() => {
+  try {
+    garantirSorteioDaSemana();
+  } catch (erro) {
+    console.error('[auditoria] sorteio da semana falhou:', erro);
+  }
+}, 3600_000).unref();
 
 /* ------------------------------------------------------------ aplicação */
 
@@ -112,6 +129,18 @@ app.get('/api/meta', (req, res) =>
     resultadosVisita: dominio.RESULTADOS_VISITA,
     niveis: dominio.NIVEIS,
     kpisDiarios: dominio.KPIS_DIARIOS,
+    // Meta diária, follow-up e anti-fantasma
+    metaLeads: dominio.META_LEADS,
+    origensLead: dominio.ORIGENS_LEAD,
+    canaisRemoto: dominio.CANAIS_REMOTO,
+    statusLead: dominio.STATUS_LEAD,
+    declaracaoRemoto: dominio.DECLARACAO_REMOTO,
+    avisoFantasma: dominio.AVISO_FANTASMA,
+    cadencia: dominio.CADENCIA,
+    semaforo: dominio.SEMAFORO,
+    regrasSemaforo: dominio.REGRAS_SEMAFORO,
+    tiposAlerta: dominio.TIPOS_ALERTA,
+    resultadosAuditoria: dominio.RESULTADOS_AUDITORIA,
   })
 );
 
@@ -130,6 +159,8 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/jornada', jornadaRoutes);
 app.use('/api/gestor', managerRoutes);
+app.use('/api/followups', followupRoutes);
+app.use('/api/auditoria', auditoriaRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 

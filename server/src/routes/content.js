@@ -11,11 +11,10 @@ import {
   salvarBinario,
   salvarDataUrl,
 } from '../lib/uploads.js';
+import { TAXA_NEWPAY } from '../domain.js';
 
 const router = Router();
 router.use(requireAuth);
-
-const TAXA_NEWPAY = 1.89; // crédito à vista da campanha vigente
 const real = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 router.get('/library', (req, res) => {

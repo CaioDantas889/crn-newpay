@@ -9,10 +9,28 @@ import TrocarSenha from '../components/TrocarSenha.jsx';
 import InstalarApp from '../components/InstalarApp.jsx';
 
 export default function Mais() {
-  const { user, sair, ehGestor, notificacoes } = useApp();
+  const { user, sair, ehGestor, ehOnboarding, ehVendedor, notificacoes, toast } = useApp();
   const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [avisos, setAvisos] = useState(() => ('Notification' in window ? Notification.permission : 'indisponivel'));
 
-  const itens = [
+  // Lembretes de ritmo (8h, 11h, 15h, 18h) como notificação do aparelho
+  const ativarAvisos = async () => {
+    const permissao = await Notification.requestPermission();
+    setAvisos(permissao);
+    toast(
+      permissao === 'granted'
+        ? 'Avisos ativados neste aparelho.'
+        : 'O navegador bloqueou os avisos. Libere no cadeado da barra de endereço.',
+      permissao === 'granted' ? 'ok' : 'erro'
+    );
+  };
+
+  const itensOnboarding = [
+    { to: '/auditoria', emoji: '◈', label: 'Auditoria' },
+    { to: '/avisos', emoji: '⚑︎', label: 'Mural de avisos' },
+  ];
+
+  const itensGerais = [
     { to: '/pipeline', emoji: '▦', label: 'Pipeline' },
     { to: '/calendario', emoji: '▤', label: 'Calendário' },
     { to: `/dia/${dateKey()}`, emoji: '▤', label: 'Agenda de hoje' },
@@ -25,10 +43,13 @@ export default function Mais() {
     ...(ehGestor
       ? [
           { to: '/gestor', emoji: '▥', label: 'Painel do gestor' },
+          { to: '/auditoria', emoji: '◈', label: 'Auditoria' },
           { to: '/equipe', emoji: '▩', label: 'Equipe' },
         ]
       : []),
   ];
+
+  const itens = ehOnboarding ? itensOnboarding : itensGerais;
 
   return (
     <div className="page">
@@ -53,6 +74,12 @@ export default function Mais() {
       </div>
 
       <div className="coluna">
+        {ehVendedor && avisos === 'default' && (
+          <button className="btn btn-block" onClick={ativarAvisos}>⚐︎ Ativar avisos de ritmo neste aparelho</button>
+        )}
+        {ehVendedor && avisos === 'granted' && (
+          <p className="mini centro">⚐︎ Avisos de ritmo ativados neste aparelho (8h, 11h, 15h e 18h, com o app aberto).</p>
+        )}
         <button className="btn btn-block" onClick={() => setTrocandoSenha(true)}>✱ Trocar minha senha</button>
         <button className="btn btn-danger btn-block" onClick={sair}>Sair da conta</button>
       </div>

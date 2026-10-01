@@ -36,6 +36,14 @@ const EMPTY = {
   dailyKpis: [],
   library: [],
   objections: [],
+  // Meta diária, follow-up e anti-fantasma
+  followups: [],
+  whatsappAberturas: [],
+  sorteiosAuditoria: [],
+  auditorias: [],
+  ocorrencias: [],
+  termosConduta: [],
+  aceitesTermo: [],
 };
 
 let db = null;

@@ -6,6 +6,7 @@ const CONTAS = [
   { email: 'carlos@newpay.com.br', nome: 'Carlos Mendes', papel: 'Vendedor externo — Iguatu', cor: '#2563eb' },
   { email: 'fernanda@newpay.com.br', nome: 'Fernanda Lima', papel: 'Vendedora externa — Icó', cor: '#db2777' },
   { email: 'gestor@newpay.com.br', nome: 'Neto Almeida', papel: 'Gerente comercial', cor: '#0f172a' },
+  { email: 'onboarding@newpay.com.br', nome: 'Paula Freitas', papel: 'Onboarding — auditoria', cor: '#7c3aed' },
 ];
 
 export default function Login() {

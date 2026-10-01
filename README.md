@@ -5,6 +5,15 @@ módulo Calendário integrado. Feito para o vendedor abrir e saber na hora:
 **quantos clientes visitar hoje, quem está mais perto de comprar, quanto falta
 para a meta e quem precisa de retorno.**
 
+Três regras resumem a operação, e o CRM existe para sustentar as três:
+
+1. **A meta não pode ser esquecida** — 30 leads novos por dia, com o placar à
+   vista em todas as telas e lembretes ao longo do dia.
+2. **A visita não pode ser inventada** — todo lead tem prova: GPS, horário e
+   foto da fachada, ou CNPJ ativo e print da conversa.
+3. **O lead não pode morrer** — todo lead que não fechou gera a próxima tarefa
+   sozinho.
+
 - **`server/`** — API REST em Node.js + Express (JavaScript, ESM)
 - **`web/`** — interface em React + Vite (JavaScript), mobile-first
 - **`Dockerfile` / `docker-compose.yml`** — para subir tudo em um comando
@@ -38,6 +47,7 @@ npm run seed
 | Vendedor externo (Iguatu) | `carlos@newpay.com.br` | `newpay123` |
 | Vendedora externa (Icó) | `fernanda@newpay.com.br` | `newpay123` |
 | Gerente comercial | `gestor@newpay.com.br` | `newpay123` |
+| Onboarding (auditoria) | `onboarding@newpay.com.br` | `newpay123` |
 
 Essas contas (e o atalho no login) só existem no banco de demonstração. Em
 produção o banco nasce vazio, com um único gestor definido por variável de
@@ -45,7 +55,7 @@ ambiente — veja [Hospedagem](#hospedagem-em-produção).
 
 ### Verificação da API
 
-Com o servidor no ar, roda ~130 checagens de ponta a ponta:
+Com o servidor no ar, roda ~260 checagens de ponta a ponta:
 
 ```bash
 npm --prefix server run smoke
@@ -62,10 +72,106 @@ npm run teste:pwa
 
 ## O que está implementado
 
+### Meta diária de leads
+**30 leads novos por dia**: no mínimo 20 presenciais e no máximo 10 remotos.
+
+| Tipo | Na meta | Prova exigida |
+| --- | --- | --- |
+| Presencial (visita) | mínimo 20 | GPS + horário + foto da fachada |
+| Remoto (indicação ou WhatsApp) | máximo 10 | CNPJ válido + print da conversa |
+
+- Remoto acima de 10 no dia fica salvo, mas não conta
+- Revisita e follow-up não contam como lead novo: têm contagem própria
+- Telefone ou CNPJ que já existe na base é bloqueado como duplicado (o
+  formulário avisa enquanto o vendedor digita, antes da foto)
+- Remoto só entra na meta depois de validado; até lá aparece em cinza, como
+  **pendente**
+- O placar — "Hoje: 12/30 (9 presenciais · 3 remotos)", quanto falta e quanto
+  tempo resta — fica **no topo de todas as telas** do vendedor
+
+### Tela "Hoje" (início do vendedor)
+Na ordem da cobrança: **follow-ups atrasados** (em vermelho), **follow-ups do
+dia** e o **placar da meta**. Abaixo continuam a meta do mês, o funil e os
+leads mais perto de comprar.
+
+### Cadastro de lead com prova (menos de 60 segundos)
+**Presencial** — nome do comércio, nome do dono, WhatsApp, segmento,
+maquininha atual, faturamento aproximado no cartão, foto da fachada e
+resultado da visita (lista fixa: **Fechou · Quente · Morno · Frio · Sem CNPJ ·
+Não atendeu**). As travas:
+- GPS e horário gravados pelo sistema — não são campo de formulário, e depois
+  de salvo o vendedor não edita
+- Foto só pela **câmera dentro do app**: a tela não tem campo de arquivo, então
+  não há caminho para a galeria
+- Sem GPS ou sem foto o lead presencial não é salvo
+
+**Remoto** — só conta com CNPJ válido + print com a resposta do lojista:
+- **CNPJ consultado na Receita** pela BrasilAPI (gratuita, sem chave): o CRM
+  preenche razão social, endereço e situação; CNPJ inativo ou inexistente é
+  bloqueado. Se a consulta estiver fora do ar o lead entra pendente e é
+  conferido de novo no envio do print (`NEWPAY_CONSULTAR_CNPJ=false` confere
+  só os dígitos, para servidor sem internet)
+- Telefone único: não repete na base nem pode ser o número de alguém da equipe
+- Origem obrigatória (Indicação ou Contato WhatsApp); indicação aponta quem
+  indicou entre os clientes cadastrados
+- Declaração obrigatória, gravada com data, hora e login
+- **Print da conversa** mostrando a data e a resposta do lojista; só a
+  mensagem do vendedor não valida. A gestão pode recusar um print — o lead
+  volta para pendente
+- **Abrir WhatsApp** pelo CRM registra a hora em que a conversa começou
+
+| Status do remoto | Quando | Conta na meta? |
+| --- | --- | --- |
+| Pendente (cinza) | cadastrado, sem print com resposta | Não |
+| Validado | CNPJ ok + print com resposta | Sim |
+| Suspeito | follow-up parado há 7 dias, ou sem avanço no funil em 30 dias | Não (sai da contagem) |
+| Fantasma | a auditoria confirmou que o lojista não reconhece o contato | Não + alerta ao gestor |
+
+O envio automático de confirmação ao lojista pela API do WhatsApp Business
+ficou fora desta fase; o ponto de encaixe é `tentarValidar` em
+`server/src/leads.js`.
+
+### Motor de follow-up
+Todo lead que não fechou tem sempre uma tarefa em aberto, na cadência contada
+a partir do cadastro:
+
+| Dia | Ação | Apoio no CRM |
+| --- | --- | --- |
+| D+1 | WhatsApp com a comparação de taxa | mensagem pronta, 1 clique |
+| D+3 | Ligação | botão de ligar + roteiro curto |
+| D+7 | Revisita | endereço e rota no mapa |
+| D+15 | Resgate | mensagem de retomada |
+| D+30 | Resgate final | sem avanço, o lead vai para "frio" |
+
+- A cadência para quando o lead fecha ou é marcado "Sem CNPJ"
+- **Follow-up só é concluído com o resultado** (no remoto, com print; na
+  revisita, com o GPS do local). Não existe "marcar como feito"
+- Se o lojista marcou dia e hora, a tarefa vai para essa data e os passos
+  seguintes se ajustam. Follow-up **atrasado não se remarca** — senão remarcar
+  viraria o jeito de zerar os atrasados sem falar com ninguém
+- Domingo não recebe tarefa: cai na segunda
+
+### Auditoria semanal, ocorrências e Termo de Conduta
+- Toda segunda o sistema sorteia **3 leads remotos e 1 presencial de cada
+  vendedor** e monta a fila do **onboarding** (papel novo em Equipe), que liga
+  para o lojista. Resultado: **Confirmado** ou **Não reconhece o contato**
+  (vira fantasma). O vendedor não vê o que foi sorteado
+- Cada fantasma confirmado gera uma **ocorrência** no perfil do vendedor,
+  visível só para a gestão, com o lead, os prints e as datas. A gestão pode
+  anular, com motivo gravado
+- Aviso fixo na tela de cadastro: "Lead fantasma = falta grave. Todo lead pode
+  ser auditado."
+- **Termo de Conduta**: a gestão publica o texto em Auditoria → Termo de
+  Conduta; a partir daí o vendedor só entra no CRM depois do aceite digital,
+  gravado com data, hora e login. Versão nova pede aceite de novo. Sem termo
+  publicado ninguém é barrado
+- Lead com prova só é excluído pelo vendedor no dia do cadastro; depois, só
+  pela gestão
+
 ### Dashboard inicial
 Meta do mês (máquinas ativadas x meta, % e quanto falta), máquinas vendidas,
-visitas do mês, posição no ranking e nível.
-Abaixo: atividades do dia (visitas agendadas, follow-ups pendentes, clientes
+posição no ranking e nível.
+Abaixo: atividades do dia (visitas agendadas, follow-ups de hoje, clientes
 para retornar, propostas enviadas), funil completo e os leads mais perto de
 comprar.
 
@@ -76,10 +182,12 @@ cliente está sem contato há mais de 7 dias** e verde quando fechado. Arrastar 
 cartão muda a etapa (no celular, o botão ⇄ do cartão faz o mesmo). A busca
 global da barra superior filtra o quadro em tempo real.
 
-### Cadastro e diagnóstico comercial
-Cadastro rápido em campo (com GPS do ponto de venda) e o diagnóstico que define
-a prioridade: máquina atual, taxa que paga hoje, faturamento mensal, volume no
-cartão, principais dores e interesse em trocar.
+### Diagnóstico comercial
+Depois do cadastro do lead, o diagnóstico completo define a prioridade:
+máquina atual, taxa que paga hoje, faturamento mensal, volume no cartão,
+principais dores e interesse em trocar. (A gestão ainda cadastra cliente direto
+na carteira, sem prova — é o caminho da importação — e esse cadastro não conta
+na meta de ninguém.)
 
 ### Pontuação automática de oportunidade
 Score de 0 a 100 calculado a partir do diagnóstico, com a régua da operação:
@@ -101,11 +209,13 @@ Clientes e leads posicionados por GPS, com filtro por raio ("Você tem 12 leads 
 menos de 3 km"), centralização na posição atual do vendedor e lista dos mais
 próximos.
 
-### Registro de visita
-Em dois toques: **Interessado · Não interessado · Fechado · Retornar depois**,
-com foto (fachada, máquina atual, contrato), áudio gravado na hora e GPS.
-Cada resultado move o cliente no funil; "retornar" já agenda o follow-up e
-"fechado" já abre o negócio com as máquinas e a taxa ofertada.
+### Registro de visita (revisita)
+Para quem já está na base, em dois toques, com a mesma lista fixa de
+resultado: **Fechou · Quente · Morno · Frio · Sem CNPJ · Não atendeu**, mais
+foto, áudio gravado na hora e GPS. O funil só anda para a frente; a visita
+vale como resultado do follow-up que estava em aberto e já deixa o próximo de
+pé; "Fechou" abre o negócio com as máquinas e a tabela de taxa. Revisita sem
+a posição do aparelho fica marcada como "sem GPS" e aparece nos alertas.
 
 O áudio depende de permissão do navegador, que vale **por endereço**: liberar o
 microfone em `localhost:5173` não vale para `localhost:4000` nem para o domínio
@@ -121,7 +231,8 @@ falhar em silêncio.
 - **Agenda corporativa**: o gestor cria eventos para toda a equipe (ou para
   alguns), com confirmação de presença obrigatória
 - **Agendar retorno** dentro da oportunidade: amanhã, 3 dias, 7 dias ou data
-  personalizada
+  personalizada. Retorno por telefone entra no motor de follow-up (só sai com
+  resultado); visita presencial marcada vira compromisso na agenda
 - **Quem visitar**: ao lado da agenda do dia, o CRM sugere os clientes que
   estão pedindo visita, com o motivo escrito do lado — "follow-up vencido",
   "23 dias sem contato", "proposta em aberto", "já vai a Icó". Um toque em
@@ -131,9 +242,24 @@ falhar em silêncio.
 
 ### Central de notificações
 Regras avaliadas a cada consulta, sem job em background: reunião em 1 hora,
-visita em 30 minutos, follow-up vencido, cliente sem retorno há mais de 7 dias,
-meta diária não alcançada, nova campanha disponível e presença pendente. Para o
-gestor: vendedor sem agenda e comunicado sem leitura.
+visita em 30 minutos, follow-ups atrasados, cliente sem retorno há mais de 7
+dias, nova campanha disponível e presença pendente. Para o gestor: vendedor sem
+agenda, comunicado sem leitura e lead fantasma confirmado.
+
+**Ritmo da meta**, ao longo do dia do vendedor:
+
+| Horário | Condição | Mensagem |
+| --- | --- | --- |
+| 8h | sempre | "Bom dia! Hoje: 30 leads + X follow-ups pendentes." |
+| 11h | menos de 8 leads | "Você está atrás do ritmo. Faltam X." |
+| 15h | menos de 18 leads | "Faltam X leads para bater a meta de hoje." |
+| 18h | sempre | resumo do dia: leads, follow-ups feitos e atrasados |
+
+Às **19h** o gestor recebe o resumo: os vermelhos do dia e os alertas de
+suspeita. Os lembretes aparecem na central e saltam na tela quando chegam; em
+**Mais → Ativar avisos de ritmo** viram também notificação do aparelho. Eles
+dependem do app aberto (em primeiro ou segundo plano): aviso com o app
+fechado exigiria Web Push, que ainda não está ligado.
 
 ### Mural de avisos
 Comunicados da diretoria com prioridade e categoria. O vendedor marca
@@ -155,8 +281,11 @@ por mês e por ano. Dá para copiar ou mandar no WhatsApp.
 - As objeções continuam com resposta e dicas, sem simulação de economia
 
 ### Ranking gamificado
-Pódio, classificação por ativações, conversão e % da meta, com os
-níveis ◔ Bronze · ◑ Prata · ◕ Ouro · ◆ Diamante · ★ Elite NewPay.
+- **Hoje** e **Semana**: leads validados e vendas (pendente e suspeito ficam
+  de fora) e a **sequência de dias de meta completa** — 30 leads + zero
+  follow-up atrasado
+- **Mês**: pódio, classificação por ativações, conversão e % da meta, com os
+  níveis ◔ Bronze · ◑ Prata · ◕ Ouro · ◆ Diamante · ★ Elite NewPay.
 
 ### KPI diário obrigatório
 Fechamento do dia com os 5 números: visitas realizadas, novos leads, propostas
@@ -196,8 +325,8 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
   batida tem link para o mapa. A conversão acontece **depois** de registrar, no
   Nominatim (OpenStreetMap): a batida nunca espera pela internet, e se a
   consulta falhar o registro mantém latitude e longitude
-- É a única chamada que o servidor faz para fora; `NEWPAY_GEOCODIFICAR=false`
-  desliga e guarda só a coordenada
+- `NEWPAY_GEOCODIFICAR=false` desliga e guarda só a coordenada. (O servidor
+  faz duas chamadas para fora: esta e a consulta de CNPJ do lead remoto)
 - Sem GPS disponível o expediente abre do mesmo jeito, marcado como "sem
   localização", porque travar o começo do dia por causa de sinal seria pior
 - Não deixa abrir dois expedientes ao mesmo tempo nem encerrar o que não
@@ -214,6 +343,25 @@ Tudo que entra no CRM pode sair, sempre com um aviso do que será removido junto
   própria conta ou deixar a operação sem nenhum gestor ativo
 
 ### Painel do gestor
+- **Semáforo** (a aba que abre): uma linha por vendedor, **vermelhos no
+  topo**. Colunas: leads de hoje, da semana e do mês (presenciais e remotos
+  separados, com % da meta), follow-ups atrasados, hora da primeira e da
+  última visita, conversão lead → venda por origem, % de remotos suspeitos e
+  alertas. Tocar no vendedor abre **o dia dele no mapa** (GPS e horário de
+  cada visita, foto da fachada) e os prints dos remotos
+
+  | Cor | Regra (por dia) |
+  | --- | --- |
+  | Verde | 30+ leads validados (mínimo 20 presenciais) e zero follow-up atrasado |
+  | Amarelo | 20 a 29 leads ou até 5 follow-ups atrasados |
+  | Vermelho | menos de 20 leads, ou mais de 5 atrasados, ou mais de 30% dos remotos suspeitos, ou lead fantasma confirmado |
+
+- **Alertas de suspeita** (não bloqueiam nada, apontam o que conferir): várias
+  visitas no mesmo ponto de GPS (raio de 30 m), menos de 3 minutos entre uma
+  visita e outra, visita fora da região do vendedor (raio em volta da base,
+  ajustável em Equipe), GPS impreciso, revisita sem GPS, remotos com conversão
+  zero enquanto os presenciais convertem, print repetido ou muito parecido e
+  muitos remotos cadastrados em sequência
 - **Execução do dia**: quem está em reunião, em visita, em rota, atrasado ou sem
   agenda; meta de visitas de cada um; quem ainda não fechou o KPI
 - **Resultado do mês**: leads gerados e trabalhados, visitas (produtivas e
@@ -412,6 +560,14 @@ Tudo que é regra de negócio está em **`server/src/domain.js`**:
 
 | O que | Constante |
 | --- | --- |
+| Meta diária (30 leads, 20 presenciais, 10 remotos) | `META_LEADS` |
+| Lista fixa do resultado da visita | `RESULTADOS_VISITA` |
+| Cadência de follow-up (D+1…D+30) e modelos de mensagem | `CADENCIA`, `MODELOS_MENSAGEM`, `ROTEIRO_LIGACAO` |
+| Quando o remoto vira suspeito | `SUSPEITA_REMOTO` |
+| Regra das cores do semáforo | `REGRAS_SEMAFORO`, `corDoSemaforo` |
+| Limites dos alertas de suspeita (30 m, 3 min, raio da região…) | `ALERTAS_SUSPEITA` |
+| Horários e limiares dos lembretes de ritmo | `LEMBRETES_RITMO`, `HORA_RESUMO_GESTOR` |
+| Quantos leads a auditoria sorteia por vendedor | `AUDITORIA` |
 | Faixas dos níveis do ranking | `NIVEIS` |
 | Pesos da pontuação de oportunidade | `calcularScore` / `INTERESSES` |
 | Segmentos, máquinas, faturamento, dores | `SEGMENTOS`, `MAQUINAS`, `FATURAMENTOS`, `DORES` |
@@ -493,28 +649,37 @@ server/
     bootstrap.js      como o banco nasce (demo fora de produção, vazio nela)
     domain.js         vocabulário e regras de negócio
     metrics.js        funil, ranking, KPIs
+    leads.js          o que conta na meta: status do lead, placar, duplicados
+    followups.js      motor de follow-up (cadência, resultado, próxima tarefa)
+    suspeitas.js      alertas de suspeita (GPS, tempo, prints, sequência)
+    semaforo.js       painel do gestor: uma linha por vendedor, com a cor do dia
+    auditoria.js      sorteio semanal, ocorrências e termo de conduta
+    migracoes.js      ajustes no banco existente, feitos ao subir
     notifications.js  regras da central de notificações
     store.js          persistência (JSON, gravação atômica, backup e trava)
     auth.js           login, hash de senha, token e senha provisória
     seed.js           base de demonstração (e --vazio para produção)
     routes/           auth, users, dashboard, clients, visits, deals, kpi,
                       ranking, content, events, tasks, jornada,
-                      announcements, notifications, manager
+                      announcements, notifications, manager, followups,
+                      auditoria
   scripts/
     smoke.mjs             verificação ponta a ponta da API
     importar-clientes.mjs importação da carteira por CSV
 web/
   src/
-    pages/            Início, Carteira, Cliente, Calendário, Agenda do dia,
-                      Tarefas, Expediente, Ranking, Biblioteca,
+    pages/            Início (tela Hoje), Carteira, Cliente, Calendário,
+                      Agenda do dia, Tarefas, Expediente, Ranking, Biblioteca,
                       Objeções, Avisos, Fechar o dia, Painel do gestor,
-                      Equipe
-    components/       AppShell, RegistrarVisita, DiagnosticoModal,
-                      NovoCliente, MapaClientes, EventoModal, EventoCard,
-                      AgendarRetorno, NotificacoesPainel, TrocarSenha, ui
+                      Auditoria, Equipe
+    components/       AppShell, NovoLead, CameraFoto, Followup, lead,
+                      SemaforoEquipe, AceiteTermo, RegistrarVisita,
+                      DiagnosticoModal, NovoCliente, MapaClientes, EventoModal,
+                      EventoCard, AgendarRetorno, NotificacoesPainel,
+                      TrocarSenha, ui
     state/app.jsx     sessão, vocabulário, notificações e avisos
     api/client.js     cliente HTTP e lista de endpoints
-    styles/           base.css, modules.css, crm.css
+    styles/           base.css, modules.css, crm.css, pipeline.css, leads.css
 ```
 
 ### Persistência

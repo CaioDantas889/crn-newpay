@@ -58,6 +58,16 @@ ok(meta.json?.tabelasTaxa?.includes('2mm'), 'vocabulario traz as tabelas de taxa
 ok(Object.keys(meta.json?.maquinas ?? {}).length >= 9, 'lista de máquinas concorrentes');
 ok(meta.json?.niveis?.length === 5, 'níveis do ranking', meta.json.niveis.map((n) => n.label).join(' < '));
 ok(meta.json?.kpisDiarios?.length === 4, 'os 4 KPIs diarios obrigatorios', meta.json.kpisDiarios.map((k) => k.label).join(' · '));
+ok(
+  Object.keys(meta.json?.resultadosVisita ?? {}).join(',') === 'fechado,quente,morno,frio,sem_cnpj,nao_atendeu',
+  'resultado da visita e a lista fixa',
+  Object.values(meta.json?.resultadosVisita ?? {}).map((r) => r.label).join(' · ')
+);
+ok(
+  meta.json?.metaLeads?.total === 30 && meta.json.metaLeads.minPresenciais === 20 && meta.json.metaLeads.maxRemotos === 10,
+  'meta diaria: 30 leads, minimo 20 presenciais, maximo 10 remotos'
+);
+ok(meta.json?.cadencia?.map((p) => p.dia).join(',') === '1,3,7,15,30', 'cadencia de follow-up D+1, D+3, D+7, D+15, D+30');
 
 /* -------------------------------------------------------------- dashboard */
 secao('Dashboard do vendedor');
@@ -95,15 +105,55 @@ ok(
   'cliente traz score e etapa do funil'
 );
 
-const novo = await api('/api/clients', {
-  token: vendedor, method: 'POST',
-  body: {
-    name: 'Cliente Teste', company: 'Mercadinho Teste', segment: 'mercadinho',
-    cnpj: '12.345.678/0001-99', phone: '(88) 99999-0000', city: 'Iguatu',
-  },
+// Foto de 1x1 px só para validar os anexos
+const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+// Telefones e CNPJ fixos do teste: se uma rodada anterior caiu no meio, o que
+// sobrou dela barraria esta como duplicado.
+const FONE_TESTE = '(88) 96111-0001';
+const FONE_REMOTO = '(88) 96111-0002';
+const CNPJ_TESTE = '00.000.000/0001-91';
+const soDigitos = (v = '') => String(v).replace(/\D/g, '');
+for (const c of (await api('/api/clients?userId=todos', { token: gestor })).json ?? []) {
+  const sobra = [FONE_TESTE, FONE_REMOTO].some((f) => soDigitos(c.whatsapp) === soDigitos(f)) || soDigitos(c.cnpj) === soDigitos(CNPJ_TESTE);
+  if (sobra) await api(`/api/clients/${c.id}?forcar=1`, { token: gestor, method: 'DELETE' });
+}
+
+/** Lead presencial completo: GPS do aparelho, foto da fachada e resultado */
+const leadPresencial = (extra = {}) => ({
+  origem: 'presencial', name: 'Cliente Teste', company: 'Mercadinho Teste', whatsapp: FONE_TESTE,
+  segment: 'mercadinho', maquinaAtual: 'ton', faturamentoCartao: '5k_10k', resultado: 'frio',
+  foto: { dataUrl: pixel }, lat: -6.3601, lng: -39.2992, precisao: 14, ...extra,
 });
-ok(novo.status === 201, 'cadastrar cliente novo em campo');
-ok(novo.json?.stage === 'novo' && novo.json?.temperature === 'frio', 'cliente novo entra como lead frio');
+
+const placarAntes = (await api('/api/followups/placar', { token: vendedor })).json;
+
+ok(
+  (await api('/api/clients', { token: vendedor, method: 'POST', body: { company: 'Sem prova', name: 'X' } })).status === 400,
+  'vendedor nao cadastra lead sem dizer se e presencial ou remoto'
+);
+const semFoto = await api('/api/clients', { token: vendedor, method: 'POST', body: leadPresencial({ foto: null }) });
+ok(semFoto.status === 400 && semFoto.json?.error?.includes('foto da fachada'), 'presencial sem foto da fachada e recusado', semFoto.json?.error);
+const leadSemGps = await api('/api/clients', { token: vendedor, method: 'POST', body: leadPresencial({ lat: null, lng: null }) });
+ok(leadSemGps.status === 400, 'presencial sem GPS e recusado', leadSemGps.json?.error);
+
+const novo = await api('/api/clients', { token: vendedor, method: 'POST', body: leadPresencial() });
+ok(novo.status === 201, 'cadastrar lead presencial em campo');
+ok(novo.json?.leadStatus === 'validado' && novo.json?.prova?.foto?.url, 'presencial nasce validado, com GPS, horario e foto', `±${novo.json?.prova?.precisao} m`);
+ok(novo.json?.stage === 'contatado' && novo.json?.temperature === 'frio', 'resultado "Frio" define etapa e temperatura');
+ok(
+  novo.json?.placar?.presenciais === placarAntes.presenciais + 1 && novo.json.placar.total === placarAntes.total + 1,
+  'lead presencial entra no placar do dia',
+  `Hoje: ${novo.json?.placar?.total}/${novo.json?.placar?.meta}`
+);
+ok(novo.json?.followup?.passo?.etapa === 'd1', 'lead que nao fechou ja nasce com o follow-up D+1', novo.json?.followup?.dueAt?.slice(0, 10));
+
+const repetido = await api('/api/clients', { token: vendedor, method: 'POST', body: leadPresencial({ company: 'Outro nome' }) });
+ok(repetido.status === 409 && repetido.json?.duplicado, 'telefone ja cadastrado e bloqueado como duplicado', repetido.json?.error);
+ok(
+  (await api(`/api/clients/checar?whatsapp=${encodeURIComponent(FONE_TESTE)}`, { token: vendedor })).json?.duplicado === true,
+  'formulario descobre o duplicado antes de salvar'
+);
 
 // Diagnóstico da especificação: máquina antiga + taxas + faturamento + troca imediata = 100
 const diag = await api(`/api/clients/${novo.json.id}/diagnostico`, {
@@ -193,22 +243,28 @@ if (alvoSugerido) {
 secao('Registro de visita');
 
 // depois de várias execuções a carteira pode estar toda fechada; então cai no primeiro
-const alvo = clientes.json.find((c) => !['fechado', 'perdido'].includes(c.stage)) ?? clientes.json[0];
+// Cliente da carteira antiga (sem prova): lead novo tem regras próprias, testadas mais abaixo
+const alvo = clientes.json.find((c) => !c.origem && !['fechado', 'perdido'].includes(c.stage)) ?? clientes.json[0];
 
+const emTresDias = new Date(Date.now() + 3 * 86400000).toISOString();
 const visitaRetorno = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, resultado: 'retornar', notes: 'Dono não estava.', retornarEmDias: 3 },
+  body: { clientId: alvo.id, resultado: 'nao_atendeu', notes: 'Dono não estava.', proximoEm: emTresDias },
 });
-ok(visitaRetorno.status === 201, 'registrar visita "retornar depois"');
-ok(visitaRetorno.json?.retorno?.type === 'followup', 'retorno vira compromisso na agenda', visitaRetorno.json?.retorno?.start?.slice(0, 10));
-ok(visitaRetorno.json?.cliente?.stage === 'contatado', 'visita move o cliente no funil');
+ok(visitaRetorno.status === 201, 'registrar revisita "não atendeu"');
+ok(
+  visitaRetorno.json?.retorno?.type === 'followup' && visitaRetorno.json.retorno.start === emTresDias,
+  'data marcada pelo lojista vira o proximo follow-up',
+  visitaRetorno.json?.retorno?.start?.slice(0, 10)
+);
+ok(visitaRetorno.json?.cliente?.stage === alvo.stage, '"não atendeu" nao mexe no funil');
+ok(visitaRetorno.json?.visita?.semGps === true, 'revisita sem posicao do aparelho fica marcada como sem GPS');
 
-// Foto de 1x1 px só para validar o anexo
-const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const visitaFoto = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, resultado: 'interessado', notes: 'Gostou da taxa.', fotos: [{ dataUrl: pixel }] },
+  body: { clientId: alvo.id, resultado: 'quente', notes: 'Gostou da taxa.', fotos: [{ dataUrl: pixel }], lat: -6.36, lng: -39.3 },
 });
+ok(visitaFoto.json?.cliente?.temperature === 'quente', 'resultado "Quente" esquenta o lead');
 ok(visitaFoto.json?.visita?.fotos?.length === 1, 'anexar foto da fachada', visitaFoto.json?.visita?.fotos?.[0]?.url);
 ok((await fetch(`${BASE}${visitaFoto.json.visita.fotos[0].url}`)).ok, 'foto fica acessível na URL publicada');
 
@@ -240,17 +296,18 @@ ok(ativado.json?.tpvRealizado === undefined, 'negocio ativado nao carrega TPV');
 const visitaComAudio = await api('/api/visits', {
   token: vendedor, method: 'POST',
   body: {
-    clientId: alvo.id, resultado: 'interessado', notes: 'audio do smoke',
+    clientId: alvo.id, resultado: 'interessado', notes: 'audio do smoke', // nome antigo: app desatualizado ainda envia
     audio: { dataUrl: `data:audio/webm;codecs=opus;base64,${Buffer.from('audio').toString('base64')}` },
   },
 });
 ok(Boolean(visitaComAudio.json?.visita?.audio?.url), 'audio gravado pelo celular e guardado', visitaComAudio.json?.visita?.audio?.url);
+ok(visitaComAudio.json?.visita?.resultado === 'quente', 'resultado no formato antigo e convertido para a lista fixa');
 ok((visitaComAudio.json?.avisos ?? []).length === 0, 'anexo aceito nao gera aviso');
 ok((await fetch(`${BASE}${visitaComAudio.json.visita.audio.url}`)).status === 200, 'o audio abre pela URL');
 
 const visitaAudioRuim = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, resultado: 'nao_interessado', audio: { dataUrl: 'data:audio/aiff;base64,QQ==' } },
+  body: { clientId: alvo.id, resultado: 'frio', audio: { dataUrl: 'data:audio/aiff;base64,QQ==' } },
 });
 ok(
   visitaAudioRuim.json?.visita?.audio === null && visitaAudioRuim.json?.avisos?.length === 1,
@@ -392,6 +449,190 @@ ok(kpisEquipe.json?.equipe?.length === totalVendedores && kpisEquipe.json?.datas
 const muralGestor = await api('/api/announcements', { token: gestor });
 ok(Array.isArray(muralGestor.json[0]?.pendingReaders), 'gestor vê quem não leu cada comunicado');
 
+/* ---------------------------------------------- meta, follow-up e prova */
+secao('Meta diária e tela Hoje');
+
+const telaHoje = await api('/api/followups/hoje', { token: vendedor });
+const placarHoje = telaHoje.json?.placar;
+ok(telaHoje.status === 200 && placarHoje?.meta === 30, 'tela Hoje', `Hoje: ${placarHoje?.total}/${placarHoje?.meta} (${placarHoje?.presenciais} presenciais · ${placarHoje?.remotos} remotos)`);
+ok(placarHoje?.total === placarHoje?.presenciais + placarHoje?.remotos, 'placar soma presenciais e remotos validados');
+ok(placarHoje?.faltam === Math.max(0, 30 - placarHoje.total) && typeof placarHoje?.minutosRestantes === 'number', 'quanto falta e quanto tempo resta no dia', `faltam ${placarHoje?.faltam} · ${placarHoje?.minutosRestantes} min`);
+ok(
+  Array.isArray(telaHoje.json?.followups?.atrasados) && Array.isArray(telaHoje.json?.followups?.hoje),
+  'atrasados primeiro, depois os follow-ups do dia',
+  `${telaHoje.json?.followups?.atrasados?.length} atrasado(s) · ${telaHoje.json?.followups?.hoje?.length} de hoje`
+);
+ok(typeof telaHoje.json?.contagens?.revisitas === 'number', 'revisita e follow-up tem contagem propria', `${telaHoje.json?.contagens?.revisitas} revisitas · ${telaHoje.json?.contagens?.followupsFeitos} follow-ups feitos`);
+ok(telaHoje.json?.aviso?.includes('falta grave'), 'aviso fixo de lead fantasma', telaHoje.json?.aviso);
+
+secao('Motor de follow-up');
+
+// Um lead só para a cadência: o de cima já foi fechado numa visita
+const leadCadencia = await api('/api/clients', {
+  token: vendedor, method: 'POST',
+  body: leadPresencial({ company: 'Padaria da Cadência', whatsapp: '(88) 96111-0003', resultado: 'morno' }),
+});
+const d1 = leadCadencia.json?.followup;
+ok(d1?.passo?.acao === 'whatsapp' && d1?.mensagem?.includes('NewPay'), 'D+1 traz a mensagem de comparacao de taxa pronta', d1?.mensagem?.slice(0, 60));
+
+const semResultado = await api(`/api/followups/${d1.id}/concluir`, { token: vendedor, method: 'POST', body: { notes: 'feito' } });
+ok(semResultado.status === 400, '"marcar como feito" sem resultado nao vale', semResultado.json?.error);
+
+const naSexta = new Date(Date.now() + 5 * 86400000).toISOString();
+const remarcado = await api(`/api/followups/${d1.id}/reagendar`, { token: vendedor, method: 'POST', body: { quando: naSexta } });
+ok(remarcado.json?.dueAt === naSexta && remarcado.json?.marcadoPeloLojista, 'lojista marcou dia e hora: a tarefa vai para essa data');
+
+const concluido = await api(`/api/followups/${d1.id}/concluir`, { token: vendedor, method: 'POST', body: { resultado: 'quente', notes: 'Pediu para ligar.' } });
+ok(concluido.status === 200 && concluido.json?.followup?.status === 'feito', 'follow-up concluido com resultado');
+ok(concluido.json?.proximo?.passo?.etapa === 'd3' && concluido.json.proximo.passo.acao === 'ligacao', 'proximo passo nasce sozinho: D+3 ligacao', concluido.json?.proximo?.dueAt?.slice(0, 10));
+ok(new Date(concluido.json?.proximo?.dueAt) > new Date(naSexta), 'a cadencia se ajusta a data que o lojista marcou');
+ok(concluido.json?.proximo?.roteiro?.length >= 3, 'ligacao vem com roteiro curto');
+
+const semCnpj = await api(`/api/followups/${concluido.json.proximo.id}/concluir`, { token: vendedor, method: 'POST', body: { resultado: 'sem_cnpj' } });
+ok(semCnpj.json?.proximo === null, '"Sem CNPJ" encerra a cadencia');
+
+const atrasadoDoSeed = telaHoje.json.followups.atrasados[0];
+if (atrasadoDoSeed) {
+  const tentativa = await api(`/api/followups/${atrasadoDoSeed.id}/reagendar`, { token: vendedor, method: 'POST', body: { quando: naSexta } });
+  ok(tentativa.status === 409, 'follow-up atrasado nao se remarca: exige resultado', tentativa.json?.error);
+}
+await api(`/api/clients/${leadCadencia.json.id}`, { token: vendedor, method: 'DELETE' });
+
+secao('Lead remoto e validação anti-fantasma');
+
+const remotoBase = { origem: 'remoto', name: 'Lojista Remoto', whatsapp: FONE_REMOTO, cnpj: CNPJ_TESTE, canal: 'whatsapp', declaracao: true };
+ok(
+  (await api('/api/clients', { token: vendedor, method: 'POST', body: { ...remotoBase, cnpj: '11.111.111/1111-11' } })).status === 400,
+  'remoto com CNPJ invalido e recusado'
+);
+const semDeclaracao = await api('/api/clients', { token: vendedor, method: 'POST', body: { ...remotoBase, declaracao: false } });
+ok(semDeclaracao.status === 400, 'remoto sem a declaracao e recusado', semDeclaracao.json?.error);
+ok(
+  (await api('/api/clients', { token: vendedor, method: 'POST', body: { ...remotoBase, canal: 'indicacao' } })).status === 400,
+  'indicacao exige escolher quem indicou'
+);
+ok(
+  (await api('/api/clients', { token: vendedor, method: 'POST', body: { ...remotoBase, whatsapp: login.json.user.phone } })).status === 409,
+  'telefone de alguem da equipe nao vira lead'
+);
+
+const antesRemoto = (await api('/api/followups/placar', { token: vendedor })).json;
+const remoto = await api('/api/clients', { token: vendedor, method: 'POST', body: remotoBase });
+ok(remoto.status === 201, 'cadastrar lead remoto', remoto.json?.razaoSocial || remoto.json?.company);
+ok(remoto.json?.leadStatus === 'pendente', 'remoto sem print fica pendente (em cinza)', remoto.json?.leadMotivo);
+ok(remoto.json?.placar?.total === antesRemoto.total && remoto.json?.placar?.pendentes === antesRemoto.pendentes + 1, 'pendente nao conta na meta');
+ok(remoto.json?.declaracao?.login === login.json.user.email && remoto.json?.declaracao?.at, 'declaracao gravada com data, hora e login');
+
+ok((await api(`/api/clients/${remoto.json.id}/whatsapp`, { token: vendedor, method: 'POST' })).status === 201, '"Abrir WhatsApp" registra a hora em que a conversa comecou');
+
+const soMensagem = await api(`/api/clients/${remoto.json.id}/print`, { token: vendedor, method: 'POST', body: { print: { dataUrl: pixel, comResposta: false } } });
+ok(soMensagem.status === 400, 'print sem a resposta do lojista nao valida', soMensagem.json?.error);
+
+const fupRemoto = (await api(`/api/clients/${remoto.json.id}`, { token: vendedor })).json.followups.find((f) => f.status === 'pendente');
+const semPrint = await api(`/api/followups/${fupRemoto.id}/concluir`, { token: vendedor, method: 'POST', body: { resultado: 'morno' } });
+ok(semPrint.status === 400, 'follow-up de lead remoto so conclui com print', semPrint.json?.error);
+
+if (remoto.json?.cnpjInfo?.ok) {
+  const comPrint = await api(`/api/clients/${remoto.json.id}/print`, {
+    token: vendedor, method: 'POST', body: { print: { dataUrl: pixel, comResposta: true, assinatura: 'f'.repeat(64) } },
+  });
+  ok(comPrint.json?.leadStatus === 'validado', 'CNPJ ativo + print com resposta = lead validado', comPrint.json?.cnpjInfo?.situacao);
+  ok(comPrint.json?.placar?.remotos === antesRemoto.remotos + (antesRemoto.remotosValidados < 10 ? 1 : 0), 'validado passa a contar (ate o teto de 10 remotos)');
+
+  const recusado = await api(`/api/clients/${remoto.json.id}/recusar-print`, { token: gestor, method: 'POST', body: { motivo: 'So aparece a mensagem do vendedor' } });
+  ok(recusado.json?.leadStatus === 'pendente', 'gestao recusa o print e o lead volta para pendente', recusado.json?.leadMotivo);
+  ok((await api(`/api/clients/${remoto.json.id}/recusar-print`, { token: vendedor, method: 'POST', body: { motivo: 'tentativa' } })).status === 403, 'vendedor nao recusa print');
+} else {
+  ok(true, 'consulta a Receita indisponivel agora: lead fica pendente ate confirmar o CNPJ', remoto.json?.avisos?.[0]);
+}
+await api(`/api/clients/${remoto.json.id}`, { token: vendedor, method: 'DELETE' });
+
+secao('Semáforo, alertas e ranking de leads');
+
+ok((await api('/api/gestor/semaforo', { token: vendedor })).status === 403, 'vendedor nao ve o semaforo');
+const semaforo = await api('/api/gestor/semaforo', { token: gestor });
+ok(semaforo.json?.linhas?.length === totalVendedores, 'uma linha por vendedor', `${semaforo.json?.resumo?.vermelhos} vermelho(s) · ${semaforo.json?.resumo?.amarelos} amarelo(s) · ${semaforo.json?.resumo?.verdes} verde(s)`);
+const ordemCor = { vermelho: 1, amarelo: 2, verde: 3, folga: 9 };
+ok(
+  semaforo.json.linhas.every((l, i, arr) => i === 0 || ordemCor[arr[i - 1].semaforo.cor] <= ordemCor[l.semaforo.cor]),
+  'vermelhos no topo',
+  semaforo.json.linhas.map((l) => `${l.vendedor.name.split(' ')[0]}:${l.semaforo.cor}`).join(' · ')
+);
+ok(
+  semaforo.json.linhas.every((l) => l.hoje && l.semana && l.mes && typeof l.atrasados === 'number' && l.conversao?.presencial && l.conversao?.remoto && l.remotosSuspeitos && Array.isArray(l.alertas)),
+  'colunas: hoje, semana, mes, atrasados, conversao por origem, suspeitos e alertas'
+);
+const tiposDeAlerta = [...new Set(semaforo.json.linhas.flatMap((l) => l.alertas.map((a) => a.tipo)))];
+ok(tiposDeAlerta.length > 0, 'alertas de suspeita', tiposDeAlerta.join(', '));
+const comFantasma = semaforo.json.linhas.find((l) => l.fantasmas > 0);
+ok(!comFantasma || comFantasma.semaforo.cor === 'vermelho', 'lead fantasma confirmado pinta de vermelho', comFantasma?.vendedor?.name);
+
+const trajeto = await api(`/api/gestor/vendedor/${login.json.user.id}/trajeto`, { token: gestor });
+ok(trajeto.json?.visitas?.every((v) => v.at && 'lat' in v), 'historico do vendedor no mapa: GPS e horario de cada visita', `${trajeto.json?.visitas?.length} visitas hoje`);
+
+const rankingLeads = await api('/api/ranking/leads?periodo=semana', { token: vendedor });
+ok(rankingLeads.json?.linhas?.length === totalVendedores, 'ranking semanal por leads validados e vendas');
+ok(
+  rankingLeads.json.linhas.every((l, i, arr) => i === 0 || arr[i - 1].leadsValidados >= l.leadsValidados),
+  'ranking ordenado por leads validados',
+  rankingLeads.json.linhas.map((l) => `${l.vendedor.name.split(' ')[0]}:${l.leadsValidados}`).join(' · ')
+);
+ok(rankingLeads.json.linhas.every((l) => typeof l.sequencia === 'number'), 'sequencia de dias de meta completa');
+ok((await api('/api/ranking/leads?periodo=dia', { token: vendedor })).json?.periodo === 'dia', 'ranking diario');
+
+secao('Auditoria, ocorrências e termo de conduta');
+
+const onboardingLogin = await api('/api/auth/login', { method: 'POST', body: { email: 'onboarding@newpay.com.br', password: 'newpay123' } });
+const onboarding = onboardingLogin.json?.token;
+ok(onboardingLogin.status === 200 && onboardingLogin.json?.user?.role === 'onboarding', 'login do onboarding', onboardingLogin.json?.user?.name);
+
+ok((await api('/api/auditoria', { token: vendedor })).status === 403, 'vendedor nao ve o que foi sorteado');
+const fila = await api('/api/auditoria', { token: onboarding });
+ok(fila.status === 200 && Array.isArray(fila.json?.fila), 'fila de ligacoes do onboarding', `${fila.json?.fila?.length} para ligar`);
+ok(fila.json?.regra?.remotosPorVendedor === 3 && fila.json?.regra?.presenciaisPorVendedor === 1, 'sorteio: 3 remotos e 1 presencial por vendedor');
+ok((await api('/api/auditoria/sortear', { token: onboarding, method: 'POST' })).status === 403, 'so a gestao pede sorteio extra');
+ok((await api('/api/clients', { token: onboarding, method: 'POST', body: leadPresencial({ whatsapp: '(88) 96111-0009' }) })).status === 403, 'onboarding nao cadastra lead');
+
+const paraAuditar = fila.json.fila.find((a) => a.lead && a.vendedor);
+if (paraAuditar) {
+  ok(paraAuditar.lead.phone || paraAuditar.lead.whatsapp, 'a fila traz o telefone do lojista e quem cadastrou', `${paraAuditar.lead.company} · ${paraAuditar.vendedor.name}`);
+  ok(
+    (await api(`/api/auditoria/${paraAuditar.id}/resultado`, { token: onboarding, method: 'POST', body: { resultado: 'nao_reconhece' } })).status === 400,
+    '"nao reconhece" exige anotar o que o lojista disse'
+  );
+  const negado = await api(`/api/auditoria/${paraAuditar.id}/resultado`, {
+    token: onboarding, method: 'POST', body: { resultado: 'nao_reconhece', notes: 'Smoke: lojista disse que ninguem esteve na loja.' },
+  });
+  ok(negado.json?.ocorrencia === true, '"nao reconhece o contato" vira fantasma e abre ocorrencia');
+  ok((await api(`/api/clients/${paraAuditar.lead.id}`, { token: gestor })).json?.leadStatus === 'fantasma', 'o lead passa a fantasma e sai da contagem');
+
+  ok((await api('/api/auditoria/ocorrencias', { token: onboarding })).status === 403, 'ocorrencias: visiveis so para a gestao');
+  const ocorrencias = await api('/api/auditoria/ocorrencias', { token: gestor });
+  const aberta = ocorrencias.json?.ocorrencias?.find((o) => o.clientId === paraAuditar.lead.id && o.status === 'ativa');
+  ok(Boolean(aberta?.lead?.cadastradoAt), 'ocorrencia guarda o lead, os prints e as datas', `${ocorrencias.json?.ocorrencias?.length} no total`);
+  ok(
+    (await api('/api/notifications', { token: gestor })).json.itens.some((n) => n.kind === 'lead_fantasma'),
+    'gestor e avisado do lead fantasma'
+  );
+
+  // Desfaz, para a demonstracao nao acumular fantasma a cada rodada do teste
+  const anulada = await api(`/api/auditoria/ocorrencias/${aberta.id}/anular`, { token: gestor, method: 'POST', body: { motivo: 'Smoke: desfazendo o teste' } });
+  ok(anulada.json?.status === 'anulada', 'gestao anula a ocorrencia, com motivo gravado');
+  ok((await api(`/api/clients/${paraAuditar.lead.id}`, { token: gestor })).json?.leadStatus !== 'fantasma', 'lead deixa de ser fantasma depois da anulacao');
+}
+
+const meuTermo = await api('/api/auditoria/termo', { token: vendedor });
+ok(meuTermo.json?.termo?.texto && meuTermo.json?.aceito === true, 'termo de conduta vigente e aceite do vendedor', `versao ${meuTermo.json?.termo?.versao}`);
+ok(login.json?.user?.termoPendente === false, 'sessao diz se falta aceitar o termo');
+ok(
+  (await api('/api/auditoria/termo/aceite', { token: vendedor, method: 'POST', body: { termoId: 'outro' } })).status === 409,
+  'aceite so vale para a versao vigente'
+);
+ok((await api('/api/auditoria/termo', { token: vendedor, method: 'PUT', body: { texto: 'x'.repeat(200) } })).status === 403, 'vendedor nao publica termo');
+ok((await api('/api/auditoria/termo', { token: gestor, method: 'PUT', body: { texto: 'curto' } })).status === 400, 'termo curto demais nao e publicado');
+const termoGestor = await api('/api/auditoria/termo', { token: gestor });
+ok(termoGestor.json?.aceites?.length === totalVendedores, 'gestao ve quem aceitou e quando');
+
 /* ------------------------------------------------------------- exclusões */
 secao('Exclusões');
 
@@ -420,7 +661,7 @@ await api(`/api/deals/${dealAtivo.json.id}`, { token: vendedor, method: 'DELETE'
 
 // Só o gestor, e só de propósito (?forcar=1), apaga um cliente com ativação
 const descartavel = await api('/api/clients', {
-  token: vendedor, method: 'POST', body: { company: 'Cliente Descartável', city: 'Iguatu' },
+  token: gestor, method: 'POST', body: { company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
 });
 await api('/api/deals', {
   token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado' },
@@ -434,7 +675,7 @@ ok(
   'gestor força a exclusão quando precisa'
 );
 
-// Exclusão em cascata do cliente de teste
+// Exclusão em cascata do lead de teste (no dia do cadastro o vendedor ainda pode)
 const delCliente = await api(`/api/clients/${novo.json.id}`, { token: vendedor, method: 'DELETE' });
 ok(delCliente.json?.ok, 'excluir cliente em cascata', JSON.stringify(delCliente.json?.removidos));
 ok((await api(`/api/clients/${novo.json.id}`, { token: vendedor })).status === 404, 'cliente sai da carteira');

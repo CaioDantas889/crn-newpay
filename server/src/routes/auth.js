@@ -9,8 +9,12 @@ import {
   validarSenha,
   verifyPassword,
 } from '../auth.js';
+import { termoPendente } from '../auditoria.js';
 
 const router = Router();
+
+// O front precisa saber, junto com a sessão, se falta aceitar o Termo de Conduta
+const comTermo = (user) => ({ ...publicUser(user), termoPendente: termoPendente(user) });
 
 router.post('/login', (req, res) => {
   const { email = '', password = '' } = req.body ?? {};
@@ -25,11 +29,11 @@ router.post('/login', (req, res) => {
     return res.status(403).json({ error: 'Usuário inativo. Fale com o gestor.' });
   }
 
-  res.json({ token: createToken(user), user: publicUser(user) });
+  res.json({ token: createToken(user), user: comTermo(user) });
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user) });
+  res.json({ user: comTermo(req.user) });
 });
 
 /**
@@ -56,7 +60,7 @@ router.post('/senha', requireAuth, (req, res) => {
   logActivity({ userId: req.user.id, action: 'senha_alterada' });
   // A troca derruba as sessoes antigas — inclusive esta, entao vai um token novo
   // para quem acabou de trocar continuar de onde estava.
-  res.json({ user: publicUser(atualizado), token: createToken(atualizado) });
+  res.json({ user: comTermo(atualizado), token: createToken(atualizado) });
 });
 
 /** Lista enxuta usada nos seletores de público-alvo e no painel do gestor */

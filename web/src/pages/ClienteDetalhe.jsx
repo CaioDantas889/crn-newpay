@@ -11,17 +11,25 @@ import AgendarRetorno from '../components/AgendarRetorno.jsx';
 import DiagnosticoModal from '../components/DiagnosticoModal.jsx';
 import RegistrarVisita from '../components/RegistrarVisita.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
+import { ConcluirFollowup } from '../components/Followup.jsx';
+import { PrintConversa } from '../components/lead.jsx';
+import { linkWhatsApp } from '../lib/contato.js';
+
+const SELO_ETAPA = { d1: 'D+1', d3: 'D+3', d7: 'D+7', d15: 'D+15', d30: 'D+30', avulso: 'Retorno' };
 
 export default function ClienteDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { meta, toast, recarregarNotificacoes } = useApp();
+  const { meta, toast, recarregarNotificacoes, recarregarPlacar, ehGestor } = useApp();
 
   const { dados: cliente, carregando, erro, recarregar } = useRecurso(() => endpoints.cliente(id), [id]);
   const [modal, setModal] = useState(params.get('diagnostico') ? 'diagnostico' : null);
   const [proposta, setProposta] = useState({ maquinas: 1, taxaOfertada: '' });
   const [excluir, setExcluir] = useState(null);
+  const [print, setPrint] = useState(null);
+  const [enviandoPrint, setEnviandoPrint] = useState(false);
+  const [concluir, setConcluir] = useState(null);
 
   if (carregando) return <div className="page"><Carregando linhas={6} /></div>;
 
@@ -56,6 +64,37 @@ export default function ClienteDetalhe() {
     recarregar();
   };
 
+  // Print com a resposta do lojista: é o que tira o remoto do "pendente"
+  const enviarPrint = async () => {
+    if (!print?.comResposta) {
+      return toast('Marque que o print mostra a data e a resposta do lojista.', 'erro');
+    }
+    setEnviandoPrint(true);
+    try {
+      const atual = await endpoints.enviarPrint(cliente.id, print);
+      toast(atual.leadStatus === 'validado' ? 'Print aceito: o lead foi validado e entrou na meta.' : `Print salvo. ${atual.leadMotivo ?? ''}`);
+      setPrint(null);
+      recarregarPlacar();
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    } finally {
+      setEnviandoPrint(false);
+    }
+  };
+
+  const recusarPrint = async () => {
+    const motivo = window.prompt('Por que este print não prova o contato?');
+    if (!motivo) return;
+    try {
+      await endpoints.recusarPrint(cliente.id, motivo);
+      toast('Print recusado: o lead voltou para pendente.');
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
+  };
+
   const avancarNegocio = async (negocio, status) => {
     await endpoints.atualizarNegocio(negocio.id, { status });
     toast(status === 'ativado' ? 'Máquina ativada! Entra na sua meta do mês.' : 'Negócio atualizado.');
@@ -73,7 +112,23 @@ export default function ClienteDetalhe() {
             {cliente.cnpj ? ` · ${cliente.cnpj}` : ''}
           </p>
         </div>
+        {cliente.leadStatus && (
+          <span className={`chip chip-status ${cliente.leadStatus}`} title={cliente.leadMotivo ?? undefined}>
+            {cliente.origemLabel} · {cliente.leadStatus}
+          </span>
+        )}
       </div>
+
+      {cliente.leadMotivo && (
+        <div className={`card card-pad lead-aviso ${cliente.leadStatus}`}>
+          <b>
+            {cliente.leadStatus === 'pendente' && 'Este lead ainda não conta na meta'}
+            {cliente.leadStatus === 'suspeito' && 'Lead suspeito: saiu da contagem'}
+            {cliente.leadStatus === 'fantasma' && 'Lead fantasma'}
+          </b>
+          <p className="mini">{cliente.leadMotivo}</p>
+        </div>
+      )}
 
       {/* ------------------------------------------------- oportunidade */}
       <div className="card card-pad linha" style={{ gap: 16 }}>
@@ -108,8 +163,15 @@ export default function ClienteDetalhe() {
           <button className="btn btn-brand" onClick={() => setModal('visita')}>✓ Registrar visita</button>
           <button className="btn btn-primary" onClick={() => setModal('retorno')}>▤ Agendar retorno</button>
           <a className="btn" href={`tel:${somenteNumeros(cliente.phone)}`}>✆︎ Ligar</a>
-          <a className="btn" href={`https://wa.me/55${somenteNumeros(cliente.whatsapp || cliente.phone)}`} target="_blank" rel="noreferrer">
-            ✉︎ WhatsApp
+          {/* Abre na hora do toque e registra, em paralelo, que a conversa começou pelo CRM */}
+          <a
+            className="btn"
+            href={linkWhatsApp(cliente.whatsapp || cliente.phone)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => endpoints.registrarWhatsApp(cliente.id).then(recarregar).catch(() => {})}
+          >
+            ✉︎ Abrir WhatsApp
           </a>
           <a
             className="btn"
@@ -144,6 +206,146 @@ export default function ClienteDetalhe() {
           </button>
         </div>
       </div>
+
+      {/* -------------------------------------------- prova do lead */}
+      {cliente.origem && (
+        <div className="card">
+          <div className="card-header">
+            <div className="crescer">
+              <h2>Prova do lead</h2>
+              <p className="mini">
+                {cliente.origem === 'presencial'
+                  ? 'Visita na loja: GPS, horário e foto da fachada'
+                  : `Remoto${cliente.canalLabel ? ` · ${cliente.canalLabel}` : ''}: CNPJ na Receita e print da conversa`}
+              </p>
+            </div>
+          </div>
+
+          <div className="card-pad grid grid-2">
+            <div className="coluna" style={{ gap: 8 }}>
+              <div className="entre">
+                <span className="mini">Cadastrado em</span>
+                <b className="menor">{diaMes(cliente.createdAt)} às {hora(cliente.createdAt)}</b>
+              </div>
+              {cliente.prova && (
+                <div className="entre">
+                  <span className="mini">GPS do cadastro</span>
+                  <a
+                    className="menor" target="_blank" rel="noreferrer"
+                    href={`https://www.google.com/maps?q=${cliente.prova.lat},${cliente.prova.lng}`}
+                  >
+                    {cliente.prova.lat.toFixed(5)}, {cliente.prova.lng.toFixed(5)}
+                    {cliente.prova.precisao ? ` · ±${cliente.prova.precisao} m` : ''} ↗
+                  </a>
+                </div>
+              )}
+              {cliente.cnpjInfo && (
+                <div className="entre">
+                  <span className="mini">Receita</span>
+                  <b className="menor">
+                    {cliente.cnpjInfo.ok
+                      ? `${cliente.cnpjInfo.situacao}${cliente.razaoSocial ? ` · ${cliente.razaoSocial}` : ''}`
+                      : 'consulta pendente'}
+                  </b>
+                </div>
+              )}
+              {cliente.indicadoPorCard && (
+                <div className="entre">
+                  <span className="mini">Indicado por</span>
+                  <b className="menor">{cliente.indicadoPorCard.company}</b>
+                </div>
+              )}
+              {cliente.declaracao && (
+                <div className="entre">
+                  <span className="mini">Declaração</span>
+                  <b className="menor">{diaMes(cliente.declaracao.at)} às {hora(cliente.declaracao.at)} · {cliente.declaracao.login}</b>
+                </div>
+              )}
+              {cliente.origem === 'remoto' && (
+                <div className="entre">
+                  <span className="mini">Conversa iniciada pelo CRM</span>
+                  <b className="menor">
+                    {cliente.whatsappAberturas.length
+                      ? `${diaMes(cliente.whatsappAberturas[0].at)} às ${hora(cliente.whatsappAberturas[0].at)}`
+                      : 'ainda não'}
+                  </b>
+                </div>
+              )}
+            </div>
+
+            <div className="coluna" style={{ gap: 8 }}>
+              {cliente.prova?.foto && (
+                <div className="anexos">
+                  <a className="anexo-miniatura grande" href={cliente.prova.foto.url} target="_blank" rel="noreferrer">
+                    <img src={cliente.prova.foto.url} alt="Foto da fachada" />
+                  </a>
+                </div>
+              )}
+              {cliente.print && (
+                <div className="linha">
+                  <a className="anexo-miniatura grande" href={cliente.print.url} target="_blank" rel="noreferrer">
+                    <img src={cliente.print.url} alt="Print da conversa" />
+                  </a>
+                  <div className="coluna" style={{ gap: 4 }}>
+                    <span className="mini">
+                      Print enviado em {diaMes(cliente.print.at)}
+                      {cliente.print.recusado ? ' · recusado pela gestão' : ''}
+                    </span>
+                    {ehGestor && !cliente.print.recusado && (
+                      <button className="btn btn-sm" onClick={recusarPrint}>Recusar print</button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {cliente.origem === 'remoto' && cliente.leadStatus === 'pendente' && (
+                <>
+                  <PrintConversa print={print} onChange={setPrint} obrigatorio />
+                  {print && (
+                    <button className="btn btn-brand" onClick={enviarPrint} disabled={enviandoPrint}>
+                      {enviandoPrint ? 'Enviando...' : 'Enviar print e validar o lead'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------- cadência de follow-up */}
+      {cliente.followups.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Cadência de follow-up</h2>
+            <span className="card-sub">
+              {cliente.cadenciaEncerrada ? 'encerrada' : 'D+1 · D+3 · D+7 · D+15 · D+30'}
+            </span>
+          </div>
+          {cliente.followups.map((f) => (
+            <div key={f.id} className="cliente-linha">
+              <span className="followup-selo">{SELO_ETAPA[f.etapa] ?? 'Follow-up'}</span>
+              <div className="info">
+                <b className="menor">{f.passo.label}</b>
+                <div className="mini">
+                  {f.status === 'feito'
+                    ? `${f.resultadoMeta?.label ?? f.resultado} · feito em ${diaMes(f.doneAt)}${f.notes ? ` · “${f.notes}”` : ''}`
+                    : `vence em ${diaMes(f.dueAt)} às ${hora(f.dueAt)}${f.atrasado ? ` · ${f.diasAtraso} dia(s) de atraso` : ''}`}
+                </div>
+              </div>
+              {f.print?.url && (
+                <a className="chip" href={f.print.url} target="_blank" rel="noreferrer">print ↗</a>
+              )}
+              {f.status === 'pendente' ? (
+                <button className={`btn btn-sm ${f.atrasado ? 'btn-danger' : 'btn-brand'}`} onClick={() => setConcluir(f)}>
+                  Registrar resultado
+                </button>
+              ) : (
+                <span className="chip chip-ok">feito</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ----------------------------------------------- diagnóstico */}
       <div className="card">
@@ -379,6 +581,9 @@ export default function ClienteDetalhe() {
       )}
       {modal === 'visita' && (
         <RegistrarVisita cliente={cliente} onFechar={() => setModal(null)} onRegistrado={recarregar} />
+      )}
+      {concluir && (
+        <ConcluirFollowup followup={concluir} onFechar={() => setConcluir(null)} onConcluido={recarregar} />
       )}
 
       {excluir?.tipo === 'cliente' && (

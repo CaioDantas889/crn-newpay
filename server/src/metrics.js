@@ -3,7 +3,7 @@
 
 import { table } from './store.js';
 import {
-  FUNIL, nivelPorAtivacoes, proximoNivel,
+  FUNIL, RESULTADOS_PERDIDOS, RESULTADOS_PRODUTIVOS, nivelPorAtivacoes, proximoNivel,
 } from './domain.js';
 import { dateKey, endOfDay, startOfDay } from './lib/dates.js';
 
@@ -52,9 +52,7 @@ export function resumoVendedor(userId, de, ate, mes) {
   const meta = metaDoMes(userId, mes ?? dateKey(de).slice(0, 7));
   const metaBatida = meta.metaMaquinas > 0 && maquinasAtivadas >= meta.metaMaquinas;
 
-  const visitasProdutivas = visitas.filter(
-    (v) => v.resultado === 'interessado' || v.resultado === 'fechado'
-  ).length;
+  const visitasProdutivas = visitas.filter((v) => RESULTADOS_PRODUTIVOS.includes(v.resultado)).length;
 
   // Conversão de proposta olha o destino das propostas DO período (e não as
   // vendas do período, que podem vir de propostas antigas ou de venda direta).
@@ -63,7 +61,7 @@ export function resumoVendedor(userId, de, ate, mes) {
   return {
     visitas: visitas.length,
     visitasProdutivas,
-    visitasPerdidas: visitas.filter((v) => v.resultado === 'nao_interessado').length,
+    visitasPerdidas: visitas.filter((v) => RESULTADOS_PERDIDOS.includes(v.resultado)).length,
     novosLeads,
     propostas: propostas.length,
     propostasFechadas,
@@ -133,9 +131,12 @@ export function atividadesDoDia(userId, base = new Date()) {
   return {
     visitasAgendadas: eventos.filter((e) => e.type === 'visita' || e.type === 'interessado').length,
     visitasRealizadas: table('visits').filter((v) => v.userId === userId && dentro(v.at, ini, fim)).length,
-    followupsPendentes: eventos.filter((e) => e.type === 'followup' && e.status === 'agendado').length,
-    followupsVencidos: table('events').filter(
-      (e) => e.ownerId === userId && e.type === 'followup' && e.status === 'agendado' && new Date(e.start) < agora
+    // Follow-up agora é tarefa do motor de cadência, não compromisso da agenda
+    followupsPendentes: table('followups').filter(
+      (f) => f.userId === userId && f.status === 'pendente' && dentro(f.dueAt, ini, fim)
+    ).length,
+    followupsVencidos: table('followups').filter(
+      (f) => f.userId === userId && f.status === 'pendente' && new Date(f.dueAt) < ini
     ).length,
     clientesParaRetornar: paraRetornar.length,
     propostasEnviadas: table('deals').filter((d) => d.userId === userId && dentro(d.propostaAt, ini, fim)).length,

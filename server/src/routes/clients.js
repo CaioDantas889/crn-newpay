@@ -1,32 +1,66 @@
-// Cadastro de clientes, diagnóstico comercial, funil e mapa.
+// Cadastro de clientes e leads, diagnóstico comercial, funil e mapa.
+//
+// Lead novo entra com prova: presencial (GPS, horário e foto da fachada) ou
+// remoto (CNPJ ativo, declaração e print da conversa). Só a gestão cadastra
+// sem prova — é o caminho da importação da carteira — e esse cadastro não
+// conta na meta de ninguém.
 
 import { Router } from 'express';
 import { find, id, insert, logActivity, remove, table, update } from '../store.js';
 import { isManager, requireAuth } from '../auth.js';
 import {
-  FUNIL, RESULTADOS_VISITA, RETURN_PRESETS, SEGMENTOS,
-  avaliarVisita, calcularScore, temperaturaPorScore,
+  CANAIS_REMOTO, DECLARACAO_REMOTO, FATURAMENTOS, FUNIL, MAQUINAS, META_LEADS, ORIGENS_LEAD,
+  RESULTADOS_VISITA, RETURN_PRESETS, SEGMENTOS,
+  avaliarVisita, calcularScore, resultadoVisita, temperaturaPorScore,
 } from '../domain.js';
 import { expandEvent, userCard } from '../serializers.js';
 import { haversine } from '../lib/geo.js';
-import { removerAnexosDaVisita } from '../lib/uploads.js';
+import { removerAnexosDaVisita, removerArquivo, salvarDataUrl } from '../lib/uploads.js';
 import { addDays, atHour, dateKey, daysBetween, endOfDay, startOfDay } from '../lib/dates.js';
+import { cnpjValido, consultarCnpj, formatarCnpj, motivoRecusaCnpj } from '../lib/cnpj.js';
+import {
+  buscarDuplicado, ehLead, motivoDoStatus, placarDoDia, soDigitos, statusDoLead, statusMeta, telefoneChave,
+  tentarValidar,
+} from '../leads.js';
+import {
+  aplicarResultado, expandirFollowup, gerarProximo, passoDaEtapa, pendenteDoCliente,
+  reagendarFollowup, salvarPrint,
+} from '../followups.js';
+import { termoPendente } from '../auditoria.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const enriquecer = (c) => ({
-  ...c,
-  diasSemContato: daysBetween(c.lastContactAt),
-  segmentoLabel: SEGMENTOS[c.segment] ?? c.segment,
-  stageMeta: FUNIL[c.stage] ?? FUNIL.novo,
-});
+const enriquecer = (c, agora = new Date()) => {
+  const status = statusDoLead(c, agora);
+  return {
+    ...c,
+    diasSemContato: daysBetween(c.lastContactAt),
+    segmentoLabel: SEGMENTOS[c.segment] ?? c.segment,
+    stageMeta: FUNIL[c.stage] ?? FUNIL.novo,
+    // Status do lead na meta: validado, pendente, suspeito ou fantasma
+    leadStatus: status,
+    leadStatusMeta: statusMeta(status),
+    leadMotivo: motivoDoStatus(c, agora),
+    origemLabel: ORIGENS_LEAD[c.origem]?.label ?? null,
+  };
+};
+
+const podeVer = (cliente, user) => cliente.ownerId === user.id || isManager(user);
+
+/** Data futura válida, ou null */
+function dataFutura(valor, agora = new Date()) {
+  if (!valor) return null;
+  const d = new Date(valor);
+  return Number.isNaN(d.getTime()) || d <= agora ? null : d;
+}
 
 /** GET /api/clients?busca=&temperatura=&cidade=&stage=&segmento=&ordem= */
 router.get('/', (req, res) => {
   const { busca = '', temperatura, cidade, stage, segmento, ordem } = req.query;
   const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
   const termo = String(busca).toLowerCase();
+  const agora = new Date();
 
   let lista = table('clients')
     .filter((c) => (alvo === 'todos' && isManager(req.user) ? true : c.ownerId === alvo))
@@ -37,7 +71,7 @@ router.get('/', (req, res) => {
     .filter((c) =>
       termo ? `${c.name} ${c.company} ${c.city} ${c.phone}`.toLowerCase().includes(termo) : true
     )
-    .map(enriquecer);
+    .map((c) => enriquecer(c, agora));
 
   const ordenacoes = {
     score: (a, b) => b.score - a.score,
@@ -80,22 +114,15 @@ router.get('/sugestoes', (req, res) => {
     ...new Set(doDia.map((e) => porId.get(e.clientId)?.city).filter(Boolean)),
   ];
 
-  // Retorno prometido que venceu (ou vence no proprio dia) e nao foi realizado
+  // Follow-up que venceu (ou vence no proprio dia) e ainda nao tem resultado
   const followupsAbertos = new Set(
-    table('events')
-      .filter(
-        (e) =>
-          e.ownerId === alvo &&
-          e.type === 'followup' &&
-          e.status === 'agendado' &&
-          new Date(e.start) <= fim
-      )
-      .map((e) => e.clientId)
-      .filter(Boolean)
+    table('followups')
+      .filter((f) => f.userId === alvo && f.status === 'pendente' && new Date(f.dueAt) <= fim)
+      .map((f) => f.clientId)
   );
 
   const sugestoes = carteira
-    .filter((c) => c.stage !== 'perdido' && !jaNaAgenda.has(c.id))
+    .filter((c) => c.stage !== 'perdido' && c.leadStatus !== 'fantasma' && !jaNaAgenda.has(c.id))
     .map((c) => {
       const diasSemContato = daysBetween(c.lastContactAt);
       const { pontos, motivos } = avaliarVisita(c, {
@@ -192,10 +219,49 @@ router.get('/funil', (req, res) => {
   );
 });
 
+/**
+ * GET /api/clients/checar?whatsapp=&cnpj= — o formulário pergunta antes de o
+ * vendedor tirar a foto: descobrir o duplicado só no "salvar" custaria os 60
+ * segundos do cadastro.
+ */
+router.get('/checar', (req, res) => {
+  const duplicado = buscarDuplicado({
+    telefones: [req.query.whatsapp, req.query.phone].filter(Boolean),
+    documento: req.query.cnpj ?? '',
+  });
+  res.json({ duplicado: Boolean(duplicado), mensagem: duplicado?.mensagem ?? null });
+});
+
+/** GET /api/clients/cnpj/:cnpj — consulta na Receita (BrasilAPI) para o lead remoto */
+router.get('/cnpj/:cnpj', async (req, res, next) => {
+  try {
+    const cnpj = soDigitos(req.params.cnpj);
+    if (!cnpjValido(cnpj)) return res.status(400).json({ error: 'CNPJ inválido — confira os 14 números.' });
+
+    const duplicado = buscarDuplicado({ documento: cnpj });
+    if (duplicado) return res.status(409).json({ error: duplicado.mensagem });
+
+    const consulta = await consultarCnpj(cnpj);
+    const recusa = motivoRecusaCnpj(consulta);
+    if (recusa) return res.status(422).json({ error: recusa });
+    if (!consulta.ok) {
+      return res.json({
+        ok: false,
+        cnpj: formatarCnpj(cnpj),
+        aviso:
+          'A consulta à Receita não respondeu agora. Dá para cadastrar: o lead fica pendente até o CNPJ ser confirmado.',
+      });
+    }
+    res.json(consulta);
+  } catch (erro) {
+    next(erro);
+  }
+});
+
 router.get('/:id', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
-  if (cliente.ownerId !== req.user.id && !isManager(req.user)) {
+  if (!podeVer(cliente, req.user)) {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
   }
 
@@ -207,28 +273,47 @@ router.get('/:id', (req, res) => {
   const visitas = table('visits')
     .filter((v) => v.clientId === cliente.id)
     .sort((a, b) => new Date(b.at) - new Date(a.at))
-    .map((v) => ({ ...v, user: userCard(v.userId), resultadoMeta: RESULTADOS_VISITA[v.resultado] ?? null }));
+    .map((v) => ({ ...v, user: userCard(v.userId), resultadoMeta: resultadoVisita(v.resultado) }));
+
+  // A cadência do lead, do primeiro passo ao que está em aberto
+  const followups = table('followups')
+    .filter((f) => f.clientId === cliente.id && f.status !== 'cancelado')
+    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt))
+    .map((f) => ({
+      ...(f.status === 'pendente' ? expandirFollowup(f) : f),
+      passo: passoDaEtapa(f.etapa),
+      resultadoMeta: resultadoVisita(f.resultado),
+    }));
 
   const negocios = table('deals')
     .filter((d) => d.clientId === cliente.id)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const { detalhes } = calcularScore(cliente.diagnostico ?? {});
+  const indicou = cliente.indicadoPor ? find('clients', cliente.indicadoPor) : null;
 
   res.json({
     ...enriquecer(cliente),
     owner: userCard(cliente.ownerId),
     scoreDetalhes: detalhes,
     visitas,
+    followups,
+    canalLabel: CANAIS_REMOTO[cliente.canal] ?? null,
+    indicadoPorCard: indicou ? { id: indicou.id, company: indicou.company, name: indicou.name } : null,
+    whatsappAberturas: table('whatsappAberturas')
+      .filter((w) => w.clientId === cliente.id)
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 5),
     negocios,
     historico: agenda.filter((e) => new Date(e.start) < new Date()),
     proximos: agenda.filter((e) => new Date(e.start) >= new Date()).reverse(),
   });
 });
 
-/** POST /api/clients — cadastro rápido em campo */
-router.post('/', (req, res) => {
-  const b = req.body ?? {};
+/* ------------------------------------------------------------ cadastro -- */
+
+/** Cadastro sem prova: só a gestão (importação da carteira). Não conta na meta. */
+function cadastrarSemProva(req, res, b) {
   if (!b.company?.trim() && !b.name?.trim()) {
     return res.status(400).json({ error: 'Informe ao menos o nome ou a empresa.' });
   }
@@ -246,19 +331,15 @@ router.post('/', (req, res) => {
 
   const { score } = calcularScore(diagnostico);
 
-  // Gestor pode cadastrar direto na carteira de um vendedor (é assim que a
-  // importação da carteira real funciona); vendedor só cadastra para si.
   let responsavel = req.user;
   if (b.ownerId && b.ownerId !== req.user.id) {
-    if (!isManager(req.user)) {
-      return res.status(403).json({ error: 'Só a gestão cadastra na carteira de outro vendedor.' });
-    }
     const dono = find('users', b.ownerId);
     if (!dono) return res.status(400).json({ error: 'Vendedor informado não existe.' });
     responsavel = dono;
   }
 
   const base = responsavel.base ?? { lat: 0, lng: 0 };
+  const agora = new Date().toISOString();
 
   const cliente = insert('clients', {
     id: id('cli'),
@@ -278,23 +359,260 @@ router.post('/', (req, res) => {
     score,
     temperature: temperaturaPorScore(score),
     stage: b.stage ?? 'novo',
+    stageChangedAt: agora,
     machines: 0,
-    lastContactAt: new Date().toISOString(),
+    lastContactAt: agora,
     notes: b.notes ?? '',
-    createdAt: new Date().toISOString(),
+    createdAt: agora,
   });
 
   logActivity({ userId: req.user.id, action: 'cliente_cadastrado', clientId: cliente.id });
-  res.status(201).json(enriquecer(cliente));
+  return res.status(201).json(enriquecer(cliente));
+}
+
+/**
+ * POST /api/clients — lead novo, com prova.
+ *
+ * Presencial: { origem: 'presencial', company, name, whatsapp, segment,
+ *   maquinaAtual, faturamentoCartao, foto: {dataUrl}, resultado, lat, lng,
+ *   precisao, notes, proximoEm, venda: { maquinas, taxaOfertada } }
+ * Remoto: { origem: 'remoto', cnpj, name, whatsapp, canal, indicadoPor,
+ *   declaracao: true, print: { dataUrl, assinatura, comResposta }, ... }
+ *
+ * GPS chega do aparelho e o horário é o do servidor: nenhum dos dois é campo
+ * de formulário.
+ */
+router.post('/', async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const gestao = isManager(req.user);
+
+    if (req.user.role === 'onboarding') {
+      return res.status(403).json({ error: 'O onboarding não cadastra leads.' });
+    }
+    if (b.ownerId && b.ownerId !== req.user.id && !gestao) {
+      return res.status(403).json({ error: 'Só a gestão cadastra na carteira de outro vendedor.' });
+    }
+
+    const origem = ORIGENS_LEAD[b.origem] ? b.origem : null;
+    if (!origem) {
+      if (gestao) return cadastrarSemProva(req, res, b);
+      return res.status(400).json({ error: 'Escolha o tipo do lead: presencial ou remoto.' });
+    }
+
+    if (termoPendente(req.user)) {
+      return res.status(403).json({ error: 'Aceite o Termo de Conduta antes de cadastrar leads.' });
+    }
+
+    const agora = new Date();
+    const presencial = origem === 'presencial';
+    const nome = String(b.name ?? '').trim();
+    let empresa = String(b.company ?? '').trim();
+    const whatsapp = String(b.whatsapp ?? '').trim();
+    const segmento = SEGMENTOS[b.segment] ? b.segment : null;
+    const faltando = [];
+
+    if (!nome) faltando.push('nome do dono');
+    if (!telefoneChave(whatsapp)) faltando.push('WhatsApp com DDD');
+
+    /* -------------------------------------------- o que cada tipo exige */
+    let consulta = null;
+    const lat = Number(b.lat);
+    const lng = Number(b.lng);
+
+    if (presencial) {
+      if (!empresa) faltando.push('nome do comércio');
+      if (!segmento) faltando.push('segmento');
+      if (!MAQUINAS[b.maquinaAtual]) faltando.push('maquininha atual');
+      if (!FATURAMENTOS[b.faturamentoCartao]) faltando.push('faturamento no cartão');
+      if (!RESULTADOS_VISITA[b.resultado]) faltando.push('resultado da visita');
+      if (!b.foto) faltando.push('foto da fachada');
+      if (faltando.length) {
+        return res.status(400).json({ error: `Falta preencher: ${faltando.join(', ')}.` });
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+        return res.status(400).json({
+          error: 'Sem a localização do aparelho não dá para provar a visita. Ligue o GPS e tente de novo.',
+        });
+      }
+    } else {
+      if (!CANAIS_REMOTO[b.canal]) faltando.push('origem (Indicação ou Contato WhatsApp)');
+      if (faltando.length) {
+        return res.status(400).json({ error: `Falta preencher: ${faltando.join(', ')}.` });
+      }
+      if (b.declaracao !== true) {
+        return res.status(400).json({ error: 'Marque a declaração de que o contato é real.' });
+      }
+      if (!cnpjValido(b.cnpj)) {
+        return res.status(400).json({ error: 'Lead remoto precisa de um CNPJ válido.' });
+      }
+      if (b.canal === 'indicacao') {
+        const indicou = find('clients', b.indicadoPor);
+        if (!indicou || !podeVer(indicou, req.user)) {
+          return res.status(400).json({ error: 'Escolha quem indicou entre os seus clientes cadastrados.' });
+        }
+      }
+    }
+
+    /* --------------------------------------------------------- duplicado */
+    const duplicado = buscarDuplicado({
+      telefones: [whatsapp, b.phone].filter(Boolean),
+      documento: b.cnpj ?? '',
+    });
+    if (duplicado) return res.status(409).json({ error: duplicado.mensagem, duplicado: true });
+
+    /* ------------------------------------------------- CNPJ na Receita -- */
+    const avisos = [];
+    if (!presencial) {
+      consulta = await consultarCnpj(b.cnpj);
+      const recusa = motivoRecusaCnpj(consulta);
+      if (recusa) return res.status(422).json({ error: recusa });
+      if (!consulta.ok) {
+        avisos.push('A Receita não respondeu: o lead fica pendente até o CNPJ ser confirmado.');
+      }
+      if (!empresa) empresa = consulta.nomeFantasia || consulta.razaoSocial || nome;
+    }
+
+    /* ------------------------------------------------------------ prova */
+    const novoId = id('cli');
+    let foto = null;
+    let print = null;
+
+    if (presencial) {
+      foto = salvarDataUrl(b.foto?.dataUrl ?? b.foto, `fachada_${novoId}`);
+      if (!foto || !foto.tipo.startsWith('image/')) {
+        if (foto) removerArquivo(foto.url);
+        return res.status(400).json({ error: 'A foto da fachada não foi aceita. Tire outra pela câmera do app.' });
+      }
+    } else if (b.print) {
+      print = salvarPrint(b.print, novoId, agora);
+      if (!print) avisos.push('O print não foi aceito (formato ou tamanho). Envie de novo pela ficha do lead.');
+    }
+
+    const placarAntes = placarDoDia(req.user.id, agora);
+    if (!presencial && placarAntes.remotosValidados + placarAntes.pendentes >= META_LEADS.maxRemotos) {
+      avisos.push(`Você já tem ${META_LEADS.maxRemotos} remotos hoje: este fica salvo, mas não conta na meta.`);
+    }
+
+    /* ----------------------------------------------------------- o lead */
+    const diagnostico = {
+      maquinaAtual: MAQUINAS[b.maquinaAtual] ? b.maquinaAtual : null,
+      faturamento: null,
+      faturamentoCartao: FATURAMENTOS[b.faturamentoCartao] ? b.faturamentoCartao : null,
+      volumeCartao: null,
+      dores: [],
+      interesse: null,
+      taxaAtual: Number(b.taxaAtual) > 0 ? Number(b.taxaAtual) : null,
+      observacoes: '',
+      preenchidoAt: null, // as 5 perguntas do diagnóstico continuam em aberto
+    };
+    const { score } = calcularScore(diagnostico);
+    const quando = agora.toISOString();
+
+    let cliente = insert('clients', {
+      id: novoId,
+      name: nome,
+      company: empresa,
+      segment: segmento ?? 'outros',
+      cnpj: cnpjValido(b.cnpj) ? formatarCnpj(b.cnpj) : String(b.cnpj ?? '').trim(),
+      phone: String(b.phone ?? '').trim() || whatsapp,
+      whatsapp,
+      city: String(b.city ?? '').trim() || consulta?.municipio || req.user.city,
+      region: '',
+      address: String(b.address ?? '').trim() || consulta?.endereco || '',
+      lat: presencial ? lat : Number(req.user.base?.lat) || 0,
+      lng: presencial ? lng : Number(req.user.base?.lng) || 0,
+      ownerId: req.user.id,
+      cadastradoPor: req.user.id,
+      diagnostico,
+      score,
+      temperature: temperaturaPorScore(score),
+      stage: 'novo',
+      stageChangedAt: quando,
+      machines: 0,
+      lastContactAt: quando,
+      notes: String(b.notes ?? '').trim(),
+      createdAt: quando,
+
+      // Prova e status do lead
+      origem,
+      canal: presencial ? null : b.canal,
+      indicadoPor: !presencial && b.canal === 'indicacao' ? b.indicadoPor : null,
+      razaoSocial: consulta?.razaoSocial ?? '',
+      cnpjInfo: consulta,
+      declaracao: presencial
+        ? null
+        : { texto: DECLARACAO_REMOTO, at: quando, userId: req.user.id, login: req.user.email },
+      prova: presencial
+        ? { lat, lng, precisao: Number.isFinite(Number(b.precisao)) ? Math.round(Number(b.precisao)) : null, at: quando, foto }
+        : null,
+      print,
+      validadoAt: presencial ? quando : null,
+      validadoPor: presencial ? 'visita' : null,
+      leadStatus: null,
+      cadenciaInicio: quando,
+      cadenciaEtapa: null,
+      cadenciaDeslocamento: 0,
+      cadenciaEncerrada: null,
+      followupPendenteDesde: null,
+    });
+
+    cliente = tentarValidar(cliente, agora);
+
+    /* ---------------------------------- visita, resultado e próxima tarefa */
+    let negocio = null;
+    const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : null;
+
+    if (presencial) {
+      insert('visits', {
+        id: id('vst'),
+        clientId: cliente.id,
+        userId: req.user.id,
+        at: quando,
+        tipo: 'lead',
+        resultado,
+        notes: cliente.notes,
+        fotos: [foto],
+        audio: null,
+        lat,
+        lng,
+        precisao: cliente.prova.precisao,
+        duracaoMin: null,
+        eventId: null,
+      });
+    }
+    if (resultado) {
+      ({ cliente, negocio } = aplicarResultado(cliente, resultado, {
+        agora, venda: b.venda, userId: req.user.id, notes: cliente.notes,
+      }));
+    }
+
+    const tarefa = cliente.cadenciaEncerrada
+      ? null
+      : gerarProximo(cliente, { agora, proximoEm: dataFutura(b.proximoEm, agora) });
+
+    logActivity({ userId: req.user.id, action: 'lead_cadastrado', clientId: cliente.id, origem });
+
+    res.status(201).json({
+      ...enriquecer(find('clients', cliente.id), agora),
+      followup: tarefa ? expandirFollowup(tarefa, { agora }) : null,
+      negocio,
+      placar: placarDoDia(req.user.id, agora),
+      avisos,
+    });
+  } catch (erro) {
+    next(erro);
+  }
 });
 
 router.patch('/:id', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
-  if (cliente.ownerId !== req.user.id && !isManager(req.user)) {
+  if (!podeVer(cliente, req.user)) {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
   }
 
+  const gestao = isManager(req.user);
   const patch = {};
   const campos = [
     'name', 'company', 'segment', 'cnpj', 'phone', 'whatsapp',
@@ -302,7 +620,25 @@ router.patch('/:id', (req, res) => {
   ];
   for (const campo of campos) if (campo in req.body) patch[campo] = req.body[campo];
 
+  // A prova do lead não se edita: o GPS veio do aparelho e o CNPJ do remoto
+  // é o que a Receita confirmou.
+  if (ehLead(cliente) && !gestao) {
+    delete patch.lat;
+    delete patch.lng;
+    if (cliente.origem === 'remoto') delete patch.cnpj;
+  }
+
   if (patch.stage && !FUNIL[patch.stage]) return res.status(400).json({ error: 'Etapa inválida.' });
+  if (patch.stage && patch.stage !== cliente.stage) patch.stageChangedAt = new Date().toISOString();
+
+  if (!gestao && ['phone', 'whatsapp', 'cnpj'].some((c) => c in patch && patch[c] !== cliente[c])) {
+    const duplicado = buscarDuplicado({
+      telefones: [patch.phone, patch.whatsapp].filter(Boolean),
+      documento: patch.cnpj ?? '',
+      exceto: cliente.id,
+    });
+    if (duplicado) return res.status(409).json({ error: duplicado.mensagem, duplicado: true });
+  }
 
   res.json(enriquecer(update('clients', cliente.id, patch)));
 });
@@ -311,13 +647,15 @@ router.patch('/:id', (req, res) => {
 router.put('/:id/diagnostico', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
-  if (cliente.ownerId !== req.user.id && !isManager(req.user)) {
+  if (!podeVer(cliente, req.user)) {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
   }
 
   const diagnostico = {
     maquinaAtual: req.body?.maquinaAtual ?? null,
     faturamento: req.body?.faturamento ?? null,
+    // Respondido no cadastro presencial; o diagnóstico não apaga
+    faturamentoCartao: cliente.diagnostico?.faturamentoCartao ?? null,
     volumeCartao: req.body?.volumeCartao ?? null,
     dores: Array.isArray(req.body?.dores) ? req.body.dores : [],
     interesse: req.body?.interesse ?? null,
@@ -326,23 +664,33 @@ router.put('/:id/diagnostico', (req, res) => {
     preenchidoAt: new Date().toISOString(),
   };
 
+  const agora = new Date().toISOString();
+  const avancou = cliente.stage === 'novo';
   const { score, detalhes } = calcularScore(diagnostico);
   const atualizado = update('clients', cliente.id, {
     diagnostico,
     score,
     temperature: temperaturaPorScore(score),
-    lastContactAt: new Date().toISOString(),
-    stage: cliente.stage === 'novo' ? 'contatado' : cliente.stage,
+    lastContactAt: agora,
+    stage: avancou ? 'contatado' : cliente.stage,
+    ...(avancou ? { stageChangedAt: agora } : {}),
   });
 
   logActivity({ userId: req.user.id, action: 'diagnostico_preenchido', clientId: cliente.id, score });
   res.json({ ...enriquecer(atualizado), scoreDetalhes: detalhes });
 });
 
-/** POST /api/clients/:id/agendar-retorno — integração com a agenda */
+/**
+ * POST /api/clients/:id/agendar-retorno — o lojista marcou dia e hora.
+ * Retorno por telefone/WhatsApp entra no motor de follow-up (e só sai de lá
+ * com resultado); visita presencial marcada vira compromisso na agenda.
+ */
 router.post('/:id/agendar-retorno', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  if (!podeVer(cliente, req.user)) {
+    return res.status(403).json({ error: 'Cliente de outra carteira.' });
+  }
 
   const { preset, date, hour = 9, minute = 0, type = 'followup', notes = '' } = req.body ?? {};
 
@@ -356,9 +704,32 @@ router.post('/:id/agendar-retorno', (req, res) => {
     return res.status(400).json({ error: 'Escolha um prazo ou uma data personalizada.' });
   }
 
+  if (type !== 'visita') {
+    const agora = new Date();
+    if (quando <= agora) return res.status(400).json({ error: 'Escolha um dia e hora no futuro.' });
+    if (cliente.leadStatus === 'fantasma') {
+      return res.status(409).json({ error: 'Lead marcado como fantasma pela auditoria: a cadência está encerrada.' });
+    }
+
+    let tarefa;
+    const pendente = pendenteDoCliente(cliente.id);
+    if (pendente) {
+      const remarcado = reagendarFollowup(pendente, quando, agora);
+      if (remarcado.erro) return res.status(409).json({ error: remarcado.erro });
+      tarefa = remarcado.tarefa;
+    } else {
+      tarefa = gerarProximo(cliente, { agora, proximoEm: quando });
+    }
+    if (notes) tarefa = update('followups', tarefa.id, { combinado: String(notes).slice(0, 300) });
+
+    logActivity({ userId: req.user.id, action: 'retorno_agendado', clientId: cliente.id, followupId: tarefa.id });
+    // `start` e `type` mantêm o formato que a tela de agendamento já lê
+    return res.status(201).json({ ...expandirFollowup(tarefa), type: 'followup', start: tarefa.dueAt });
+  }
+
   const evento = insert('events', {
     id: id('evt'),
-    title: `${type === 'visita' ? 'Visita' : 'Follow-up'} ${(cliente.name || cliente.company).split(' ')[0]}`,
+    title: `Visita ${(cliente.name || cliente.company).split(' ')[0]}`,
     type,
     start: quando.toISOString(),
     end: new Date(quando.getTime() + 30 * 60000).toISOString(),
@@ -368,7 +739,7 @@ router.post('/:id/agendar-retorno', (req, res) => {
     audienceIds: [],
     requiresConfirmation: false,
     clientId: cliente.id,
-    location: type === 'visita' ? `${cliente.company} — ${cliente.city}` : 'Telefone',
+    location: `${cliente.company} — ${cliente.city}`,
     notes,
     status: 'agendado',
     checkinAt: null,
@@ -382,21 +753,130 @@ router.post('/:id/agendar-retorno', (req, res) => {
 });
 
 /**
+ * POST /api/clients/:id/print — print da conversa com a resposta do lojista.
+ * É o que tira o lead remoto do "pendente". Se a Receita estava fora do ar no
+ * cadastro, a consulta do CNPJ é refeita aqui.
+ */
+router.post('/:id/print', async (req, res, next) => {
+  try {
+    let cliente = find('clients', req.params.id);
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    if (!podeVer(cliente, req.user)) return res.status(403).json({ error: 'Cliente de outra carteira.' });
+    if (cliente.origem !== 'remoto') {
+      return res.status(400).json({ error: 'Print de conversa é a prova do lead remoto.' });
+    }
+    if (cliente.leadStatus === 'fantasma') {
+      return res.status(409).json({ error: 'Lead marcado como fantasma pela auditoria.' });
+    }
+
+    const agora = new Date();
+    const print = salvarPrint(req.body?.print, cliente.id, agora);
+    if (!print) return res.status(400).json({ error: 'Print não aceito. Envie uma imagem de até 8 MB.' });
+    if (!print.comResposta) {
+      removerArquivo(print.url);
+      return res.status(400).json({
+        error: 'Só a sua mensagem não valida: o print precisa mostrar a data e a resposta do lojista.',
+      });
+    }
+
+    const patch = { print };
+    if (!cliente.cnpjInfo?.ok) {
+      const consulta = await consultarCnpj(cliente.cnpj);
+      const recusa = motivoRecusaCnpj(consulta);
+      if (recusa) {
+        removerArquivo(print.url);
+        return res.status(422).json({ error: recusa });
+      }
+      patch.cnpjInfo = consulta;
+      if (consulta.ok && !cliente.razaoSocial) patch.razaoSocial = consulta.razaoSocial;
+    }
+
+    if (cliente.print?.url) removerArquivo(cliente.print.url);
+    cliente = tentarValidar(update('clients', cliente.id, patch), agora);
+
+    logActivity({ userId: req.user.id, action: 'print_enviado', clientId: cliente.id });
+    res.json({ ...enriquecer(cliente, agora), placar: placarDoDia(req.user.id, agora) });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/** POST /api/clients/:id/recusar-print — a gestão viu o print e ele não prova nada */
+router.post('/:id/recusar-print', (req, res) => {
+  if (!isManager(req.user)) return res.status(403).json({ error: 'Só a gestão recusa um print.' });
+  const cliente = find('clients', req.params.id);
+  if (!cliente?.print) return res.status(404).json({ error: 'Lead sem print.' });
+
+  const motivo = String(req.body?.motivo ?? '').trim();
+  if (motivo.length < 5) return res.status(400).json({ error: 'Explique o motivo da recusa (mínimo de 5 letras).' });
+
+  const atualizado = update('clients', cliente.id, {
+    print: {
+      ...cliente.print,
+      recusado: true,
+      motivoRecusa: motivo,
+      recusadoPor: req.user.id,
+      recusadoAt: new Date().toISOString(),
+    },
+    validadoAt: null,
+    validadoPor: null,
+  });
+  logActivity({ userId: req.user.id, action: 'print_recusado', clientId: cliente.id });
+  res.json(enriquecer(atualizado));
+});
+
+/**
+ * POST /api/clients/:id/whatsapp — botão "Abrir WhatsApp" do CRM: registra a
+ * hora em que o vendedor iniciou a conversa pelo sistema.
+ */
+router.post('/:id/whatsapp', (req, res) => {
+  const cliente = find('clients', req.params.id);
+  if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  if (!podeVer(cliente, req.user)) return res.status(403).json({ error: 'Cliente de outra carteira.' });
+
+  const abertura = insert('whatsappAberturas', {
+    id: id('wpp'),
+    clientId: cliente.id,
+    userId: req.user.id,
+    followupId: req.body?.followupId ?? null,
+    at: new Date().toISOString(),
+  });
+  if (!cliente.whatsappIniciadoAt) update('clients', cliente.id, { whatsappIniciadoAt: abertura.at });
+  res.status(201).json(abertura);
+});
+
+/**
  * DELETE /api/clients/:id — remove o cliente e tudo que depende dele.
  * Cliente com máquina ativada carrega o resultado do mês: o vendedor não
  * apaga (recebe 409 e a orientação de marcar como perdido); o gestor pode
  * forçar com ?forcar=1.
+ *
+ * Lead com prova só sai pela mão do vendedor no próprio dia do cadastro
+ * (erro de digitação). Depois disso ele já contou na meta e pode ser
+ * auditado: quem apaga é a gestão.
  */
 router.delete('/:id', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
-  if (cliente.ownerId !== req.user.id && !isManager(req.user)) {
+  if (!podeVer(cliente, req.user)) {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
+  }
+
+  const gestao = isManager(req.user);
+  if (ehLead(cliente) && !gestao && dateKey(cliente.createdAt) !== dateKey()) {
+    return res.status(403).json({
+      error: 'Lead com prova só pode ser excluído no dia do cadastro. Depois disso, peça à gestão.',
+    });
+  }
+  if (table('ocorrencias').some((o) => o.clientId === cliente.id && o.status === 'ativa')) {
+    return res.status(409).json({
+      error: 'Este lead tem ocorrência registrada e serve de prova. Anule a ocorrência antes de excluir.',
+    });
   }
 
   const negocios = table('deals').filter((d) => d.clientId === cliente.id);
   const ativados = negocios.filter((d) => d.status === 'ativado');
-  const podeForcar = isManager(req.user) && req.query.forcar === '1';
+  const podeForcar = gestao && req.query.forcar === '1';
 
   if (ativados.length && !podeForcar) {
     const maquinas = ativados.reduce((s, d) => s + d.maquinas, 0);
@@ -411,15 +891,28 @@ router.delete('/:id', (req, res) => {
   const visitas = table('visits').filter((v) => v.clientId === cliente.id);
   const eventos = table('events').filter((e) => e.clientId === cliente.id);
   const tarefas = table('tasks').filter((t) => t.clientId === cliente.id);
+  const followups = table('followups').filter((f) => f.clientId === cliente.id);
 
   let anexos = 0;
   for (const v of visitas) {
     anexos += removerAnexosDaVisita(v);
     remove('visits', v.id);
   }
+  for (const f of followups) {
+    if (f.print?.url && removerArquivo(f.print.url)) anexos += 1;
+    remove('followups', f.id);
+  }
+  if (cliente.print?.url && removerArquivo(cliente.print.url)) anexos += 1;
   for (const d of negocios) remove('deals', d.id);
   for (const e of eventos) remove('events', e.id);
   for (const t of tarefas) remove('tasks', t.id);
+  for (const w of table('whatsappAberturas').filter((x) => x.clientId === cliente.id)) {
+    remove('whatsappAberturas', w.id);
+  }
+  // Auditoria ainda na fila não tem mais para quem ligar
+  for (const a of table('auditorias').filter((x) => x.clientId === cliente.id && x.status === 'pendente')) {
+    remove('auditorias', a.id);
+  }
   remove('clients', cliente.id);
 
   logActivity({ userId: req.user.id, action: 'cliente_excluido', clientId: cliente.id, company: cliente.company });
@@ -432,6 +925,7 @@ router.delete('/:id', (req, res) => {
       negocios: negocios.length,
       compromissos: eventos.length,
       tarefas: tarefas.length,
+      followups: followups.length,
       anexos,
     },
   });
@@ -441,9 +935,16 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/contato', (req, res) => {
   const cliente = find('clients', req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  if (!podeVer(cliente, req.user)) {
+    return res.status(403).json({ error: 'Cliente de outra carteira.' });
+  }
 
-  const patch = { lastContactAt: new Date().toISOString() };
-  if (req.body?.stage && FUNIL[req.body.stage]) patch.stage = req.body.stage;
+  const agora = new Date().toISOString();
+  const patch = { lastContactAt: agora };
+  if (req.body?.stage && FUNIL[req.body.stage] && req.body.stage !== cliente.stage) {
+    patch.stage = req.body.stage;
+    patch.stageChangedAt = agora;
+  }
 
   res.json(enriquecer(update('clients', cliente.id, patch)));
 });

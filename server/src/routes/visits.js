@@ -1,14 +1,21 @@
-// Registro de visita: o botão mais usado do app. Em dois toques o vendedor
-// diz o que aconteceu, e o CRM move o funil, registra o contato e, quando é
-// venda, já abre o negócio.
+// Registro de visita a quem já está na base (revisita): o botão mais usado do
+// app. Em dois toques o vendedor diz o que aconteceu, e o CRM move o funil,
+// registra o contato, fecha o follow-up que estava em aberto, já deixa o
+// próximo de pé e, quando é venda, abre o negócio.
+//
+// Revisita não conta como lead novo: tem contagem própria na tela "Hoje".
+// A primeira visita de um lead nasce junto com o cadastro (routes/clients.js).
 
 import { Router } from 'express';
 import { find, id, insert, logActivity, remove, table, update } from '../store.js';
 import { isManager, requireAuth } from '../auth.js';
-import { RESULTADOS_VISITA } from '../domain.js';
-import { clientCard, expandEvent, userCard } from '../serializers.js';
+import { RESULTADOS_VISITA, RESULTADOS_VISITA_ANTIGOS, resultadoVisita } from '../domain.js';
+import { clientCard, userCard } from '../serializers.js';
 import { removerAnexosDaVisita, salvarDataUrl, salvarVarios } from '../lib/uploads.js';
-import { addDays, atHour, endOfDay, startOfDay } from '../lib/dates.js';
+import { addDays, atHour, dateKey, endOfDay, startOfDay } from '../lib/dates.js';
+import {
+  aplicarResultado, concluirFollowup, expandirFollowup, gerarProximo, pendenteDoCliente, salvarPrint,
+} from '../followups.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,7 +24,7 @@ const expandir = (v) => ({
   ...v,
   client: clientCard(v.clientId),
   user: userCard(v.userId),
-  resultadoMeta: RESULTADOS_VISITA[v.resultado] ?? null,
+  resultadoMeta: resultadoVisita(v.resultado),
 });
 
 /** GET /api/visits?clientId=&data=&userId= */
@@ -41,16 +48,23 @@ router.get('/', (req, res) => {
 
 /**
  * POST /api/visits
- * body: { clientId, resultado, notes, fotos[], audio, lat, lng, eventId,
- *         retornarEmDias, venda: { maquinas, taxaOfertada: 'nome da tabela' } }
+ * body: { clientId, resultado, notes, fotos[], audio, lat, lng, precisao,
+ *         eventId, proximoEm, print, venda: { maquinas, taxaOfertada } }
+ *
+ * `resultado` é a lista fixa: fechado, quente, morno, frio, sem_cnpj,
+ * nao_atendeu. `proximoEm` é o dia e hora que o lojista marcou.
  */
 router.post('/', (req, res) => {
   const b = req.body ?? {};
   const cliente = find('clients', b.clientId);
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  if (cliente.ownerId !== req.user.id && !isManager(req.user)) {
+    return res.status(403).json({ error: 'Cliente de outra carteira.' });
+  }
 
-  const meta = RESULTADOS_VISITA[b.resultado];
-  if (!meta) return res.status(400).json({ error: 'Informe o resultado da visita.' });
+  // App aberto numa versão anterior ainda manda os nomes antigos
+  const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
+  if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
 
   const agora = new Date();
 
@@ -69,97 +83,97 @@ router.post('/', (req, res) => {
   }
   if (avisos.length) console.warn(`[visitas] anexo recusado: ${avisos.join(' ')}`);
 
+  // A posição é a do aparelho ou nenhuma: endereço de cadastro não prova que
+  // o vendedor esteve lá.
+  const lat = Number(b.lat);
+  const lng = Number(b.lng);
+  const comGps = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+
   const visita = insert('visits', {
     id: id('vst'),
     clientId: cliente.id,
     userId: req.user.id,
     at: agora.toISOString(),
-    resultado: b.resultado,
+    tipo: 'revisita',
+    resultado,
     notes: b.notes ?? '',
     fotos,
     audio,
-    lat: b.lat ?? cliente.lat,
-    lng: b.lng ?? cliente.lng,
+    lat: comGps ? lat : null,
+    lng: comGps ? lng : null,
+    precisao: comGps && Number.isFinite(Number(b.precisao)) ? Math.round(Number(b.precisao)) : null,
+    semGps: !comGps,
     duracaoMin: Number(b.duracaoMin) || null,
     eventId: b.eventId ?? null,
   });
-
-  // A visita sempre conta como contato e empurra o funil
-  const patchCliente = { lastContactAt: agora.toISOString(), stage: meta.stage };
-  if (b.resultado === 'fechado') patchCliente.machines = (cliente.machines || 0) + (Number(b.venda?.maquinas) || 1);
-  update('clients', cliente.id, patchCliente);
 
   // Fecha o compromisso da agenda, quando a visita veio de um agendamento
   if (b.eventId) {
     const evento = find('events', b.eventId);
     if (evento && evento.ownerId === req.user.id) {
-      update('events', evento.id, { status: 'realizado', checkinAt: agora.toISOString(), outcome: b.resultado });
+      update('events', evento.id, { status: 'realizado', checkinAt: agora.toISOString(), outcome: resultado });
     }
   }
 
-  // Retorno programado vira compromisso na agenda
-  let retorno = null;
-  if (b.resultado === 'retornar' || b.retornarEmDias) {
-    const dias = Number(b.retornarEmDias) || 3;
-    const quando = atHour(addDays(agora, dias), 9, 0);
-    retorno = insert('events', {
-      id: id('evt'),
-      title: `Follow-up ${cliente.name.split(' ')[0]}`,
-      type: 'followup',
-      start: quando.toISOString(),
-      end: new Date(quando.getTime() + 30 * 60000).toISOString(),
-      scope: 'pessoal',
-      ownerId: req.user.id,
-      audience: null,
-      audienceIds: [],
-      requiresConfirmation: false,
-      clientId: cliente.id,
-      location: 'Telefone',
-      notes: b.notes ?? '',
-      status: 'agendado',
-      checkinAt: null,
-      outcome: null,
-      createdBy: req.user.id,
-      createdAt: agora.toISOString(),
-    });
+  // "retornarEmDias" é o formato antigo de "o lojista pediu para voltar em N dias"
+  let proximoEm = b.proximoEm ? new Date(b.proximoEm) : null;
+  if (proximoEm && (Number.isNaN(proximoEm.getTime()) || proximoEm <= agora)) proximoEm = null;
+  if (!proximoEm && Number(b.retornarEmDias) > 0) {
+    proximoEm = atHour(addDays(agora, Number(b.retornarEmDias)), 9, 0);
   }
 
-  // Visita que fechou já abre o negócio
+  // A visita vale como resultado do follow-up que estava em aberto; sem
+  // tarefa em aberto, ela mesma empurra o funil e gera a próxima.
+  const venda = resultado === 'fechado' ? b.venda : undefined;
+  const pendente = pendenteDoCliente(cliente.id);
   let negocio = null;
-  if (b.resultado === 'fechado') {
-    const maquinas = Number(b.venda?.maquinas) || 1;
-    negocio = insert('deals', {
-      id: id('deal'),
-      clientId: cliente.id,
-      userId: req.user.id,
-      maquinas,
-      taxaOfertada: String(b.venda?.taxaOfertada ?? '').trim().slice(0, 40) || null,
-      status: 'fechado',
-      propostaAt: agora.toISOString(),
-      fechamentoAt: agora.toISOString(),
-      ativacaoAt: null,
-      notes: b.notes ?? '',
-      createdAt: agora.toISOString(),
-    });
+  let proximo = null;
+
+  if (pendente) {
+    const print = b.print ? salvarPrint(b.print, cliente.id, agora) : null;
+    ({ negocio, proximo } = concluirFollowup(pendente, cliente, {
+      resultado, notes: b.notes ?? '', print, visitId: visita.id, proximoEm, venda, userId: req.user.id, agora,
+    }));
+  } else {
+    const efeito = aplicarResultado(cliente, resultado, { agora, venda, userId: req.user.id, notes: b.notes ?? '' });
+    negocio = efeito.negocio;
+    if (!efeito.cliente.cadenciaEncerrada || proximoEm) {
+      proximo = gerarProximo(efeito.cliente, { agora, proximoEm });
+    }
   }
 
-  logActivity({ userId: req.user.id, action: 'visita_registrada', clientId: cliente.id, resultado: b.resultado });
+  logActivity({ userId: req.user.id, action: 'visita_registrada', clientId: cliente.id, resultado });
 
   res.status(201).json({
     visita: expandir(visita),
-    retorno: retorno ? expandEvent(retorno, req.user.id) : null,
+    // `retorno.start` mantém o formato que a tela de visita já lia
+    retorno: proximo ? { ...expandirFollowup(proximo, { agora }), type: 'followup', start: proximo.dueAt } : null,
     negocio,
     cliente: find('clients', cliente.id),
     avisos,
   });
 });
 
+/**
+ * DELETE /api/visits/:id
+ * A visita do cadastro é a prova do lead: não sai sozinha (apaga-se o lead).
+ * Revisita o vendedor só apaga no próprio dia.
+ */
 router.delete('/:id', (req, res) => {
   const visita = find('visits', req.params.id);
   if (!visita) return res.status(404).json({ error: 'Visita não encontrada.' });
-  if (visita.userId !== req.user.id && !isManager(req.user)) {
+
+  const gestao = isManager(req.user);
+  if (visita.userId !== req.user.id && !gestao) {
     return res.status(403).json({ error: 'Visita de outro vendedor.' });
   }
+  if (!gestao && visita.tipo === 'lead') {
+    return res.status(403).json({ error: 'Esta visita é a prova do cadastro do lead e não pode ser excluída.' });
+  }
+  if (!gestao && visita.tipo === 'revisita' && dateKey(visita.at) !== dateKey()) {
+    return res.status(403).json({ error: 'Visita de outro dia só é excluída pela gestão.' });
+  }
+
   const anexos = removerAnexosDaVisita(visita);
   remove('visits', visita.id);
   res.json({ ok: true, anexosRemovidos: anexos });

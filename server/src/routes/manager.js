@@ -4,9 +4,10 @@
 import { Router } from 'express';
 import { table } from '../store.js';
 import { requireAuth, requireRole } from '../auth.js';
-import { SEGMENTOS, announcementReachesUser, reachesUser } from '../domain.js';
+import { RESULTADOS_PRODUTIVOS, SEGMENTOS, announcementReachesUser, reachesUser } from '../domain.js';
 import { faixaDoMes, resumoVendedor } from '../metrics.js';
 import { addDays, dateKey, endOfDay, startOfDay } from '../lib/dates.js';
+import { painelSemaforo, remotosDoDia, trajetoDoDia } from '../semaforo.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('gestor', 'diretoria'));
@@ -63,7 +64,7 @@ router.get('/visao-geral', (req, res) => {
         pendentes: ativos.filter((e) => e.status === 'agendado').length,
         atrasados: atrasados.length,
         visitasRegistradas: visitasDoDia.length,
-        visitasProdutivas: visitasDoDia.filter((x) => ['interessado', 'fechado'].includes(x.resultado)).length,
+        visitasProdutivas: visitasDoDia.filter((x) => RESULTADOS_PRODUTIVOS.includes(x.resultado)).length,
         maquinasVendidas: vendasDoDia.reduce((s, d) => s + d.maquinas, 0),
         tarefas: table('tasks').filter((t) => t.ownerId === v.id && dentro(t.dueAt, ini, fim)).length,
         tarefasConcluidas: table('tasks').filter((t) => t.ownerId === v.id && t.done && dentro(t.dueAt, ini, fim)).length,
@@ -181,6 +182,37 @@ router.get('/indicadores', (req, res) => {
     porVendedor: porVendedor.sort((a, b) => b.maquinasAtivadas - a.maquinasAtivadas),
     porCidade: porChave((c) => c.city),
     porSegmento: porChave((c) => SEGMENTOS[c.segment] ?? c.segment),
+  });
+});
+
+/**
+ * GET /api/gestor/semaforo?data=YYYY-MM-DD
+ * Uma linha por vendedor, vermelhos no topo: leads do dia, da semana e do mês,
+ * follow-ups atrasados, primeira e última visita, conversão e alertas.
+ */
+router.get('/semaforo', (req, res) => {
+  const dia = req.query.data ? new Date(`${req.query.data}T12:00:00`) : new Date();
+  if (Number.isNaN(dia.getTime())) return res.status(400).json({ error: 'Data inválida.' });
+  res.json(painelSemaforo(dia));
+});
+
+/**
+ * GET /api/gestor/vendedor/:id/trajeto?data=YYYY-MM-DD
+ * O histórico do vendedor no mapa: GPS e horário de cada visita do dia, e os
+ * leads remotos com o print para conferir.
+ */
+router.get('/vendedor/:id/trajeto', (req, res) => {
+  const vendedor = table('users').find((u) => u.id === req.params.id);
+  if (!vendedor) return res.status(404).json({ error: 'Vendedor não encontrado.' });
+
+  const dia = req.query.data ? new Date(`${req.query.data}T12:00:00`) : new Date();
+  if (Number.isNaN(dia.getTime())) return res.status(400).json({ error: 'Data inválida.' });
+
+  res.json({
+    data: dateKey(dia),
+    vendedor: { id: vendedor.id, name: vendedor.name, color: vendedor.color, city: vendedor.city, base: vendedor.base ?? null },
+    visitas: trajetoDoDia(vendedor.id, dia),
+    remotos: remotosDoDia(vendedor.id, dia),
   });
 });
 

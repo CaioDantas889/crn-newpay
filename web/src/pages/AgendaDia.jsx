@@ -21,6 +21,7 @@ export default function AgendaDia() {
   const { dados, carregando, recarregar } = useRecurso(() => endpoints.eventosDoDia(chave), [chave]);
   const eventos = dados?.eventos ?? [];
   const tarefas = dados?.tarefas ?? [];
+  const followups = dados?.followups ?? [];
   const resumo = dados?.resumo;
 
   const agora = new Date();
@@ -180,6 +181,25 @@ export default function AgendaDia() {
             passado={chave < dateKey()}
             onAgendar={agendarVisita}
           />
+
+          {followups.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <h2>Follow-ups do dia</h2>
+                <span className="card-sub">{followups.length}</span>
+              </div>
+              {followups.map((f) => (
+                <div key={f.id} className="cliente-linha" onClick={() => navigate('/')}>
+                  <span className="followup-selo">{f.passo.dia ? `D+${f.passo.dia}` : 'Retorno'}</span>
+                  <div className="info">
+                    <b className="truncar" style={{ display: 'block' }}>{f.client?.company}</b>
+                    <span className="mini">{f.passo.label} · {hora(f.dueAt)}</span>
+                  </div>
+                </div>
+              ))}
+              <p className="card-pad mini">O resultado de cada um se registra na tela Hoje.</p>
+            </div>
+          )}
 
           <div className="card">
             <div className="card-header">

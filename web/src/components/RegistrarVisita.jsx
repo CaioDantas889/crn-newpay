@@ -5,8 +5,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
-import { moeda } from '../lib/date.js';
+import { isoDoInput } from '../lib/contato.js';
 import { Modal } from './ui.jsx';
+import { LojistaMarcou } from './lead.jsx';
 
 /** Reduz a foto antes de enviar: o celular do vendedor costuma estar no 4G */
 function comprimirImagem(file, maxLado = 1280, qualidade = 0.72) {
@@ -73,7 +74,7 @@ function verificarSuporteAudio() {
 }
 
 export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFechar, onRegistrado }) {
-  const { meta, toast, recarregarNotificacoes } = useApp();
+  const { meta, toast, recarregarNotificacoes, recarregarPlacar } = useApp();
   const navigate = useNavigate();
 
   const [cliente, setCliente] = useState(clienteInicial ?? null);
@@ -86,7 +87,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const [gravando, setGravando] = useState(false);
   const [preparandoAudio, setPreparandoAudio] = useState(false);
   const [audioErro, setAudioErro] = useState(null);
-  const [retornarEmDias, setRetornarEmDias] = useState(3);
+  const [proximoEm, setProximoEm] = useState('');
   const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: '' });
   const [local, setLocal] = useState(null);
   const [localErro, setLocalErro] = useState(null);
@@ -222,7 +223,8 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
         eventId,
         lat: local?.lat,
         lng: local?.lng,
-        retornarEmDias: resultado === 'retornar' ? Number(retornarEmDias) : undefined,
+        precisao: local?.precisao,
+        proximoEm: isoDoInput(proximoEm),
         venda: resultado === 'fechado' ? venda : undefined,
       });
 
@@ -233,16 +235,15 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       toast(
         resultado === 'fechado'
           ? `Venda registrada! ${venda.maquinas} máquina(s).`
-          : resultado === 'interessado'
-            ? 'Visita registrada. Cliente movido para negociação.'
-            : dataRetorno
-              ? `Visita registrada. Retorno agendado para ${dataRetorno}.`
-              : 'Visita registrada.'
+          : dataRetorno
+            ? `Visita registrada. Próximo follow-up em ${dataRetorno}.`
+            : 'Visita registrada.'
       );
       // Anexo que o servidor recusou vira aviso na tela, não desaparece calado
       for (const aviso of resposta.avisos ?? []) toast(aviso, 'erro');
 
       recarregarNotificacoes();
+      recarregarPlacar();
       onRegistrado?.(resposta);
       onFechar();
       if (resultado === 'fechado') navigate(`/carteira/${cliente.id}`);
@@ -258,7 +259,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   return (
     <Modal
       titulo="Registrar visita"
-      subtitulo={cliente ? `${cliente.company} — ${cliente.city}` : 'Escolha o cliente visitado'}
+      subtitulo={cliente ? `${cliente.company} — ${cliente.city}` : 'Revisita a quem já está na base — loja nova entra em “+ Lead”'}
       onFechar={onFechar}
       rodape={
         <>
@@ -305,7 +306,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
 
           <div className="campo">
             <label>O que aconteceu na visita?</label>
-            <div className="resultados">
+            <div className="resultados seis">
               {resultados.map(([chave, info]) => (
                 <button
                   key={chave}
@@ -352,22 +353,14 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
             </div>
           )}
 
-          {resultado === 'retornar' && (
-            <div className="campo">
-              <label>Retornar em</label>
-              <div className="opcoes">
-                {[1, 3, 7, 15].map((d) => (
-                  <button
-                    key={d}
-                    className={`opcao${Number(retornarEmDias) === d ? ' ativa' : ''}`}
-                    onClick={() => setRetornarEmDias(d)}
-                  >
-                    {d === 1 ? 'Amanhã' : `${d} dias`}
-                  </button>
-                ))}
-              </div>
-              <p className="mini">O follow-up já entra na sua agenda.</p>
-            </div>
+          {resultado && !['fechado', 'sem_cnpj'].includes(resultado) && (
+            <>
+              <LojistaMarcou valor={proximoEm} onChange={setProximoEm} />
+              <p className="mini">
+                Revisita não conta como lead novo. Se este cliente tem follow-up em aberto, a visita
+                vale como o resultado dele e o próximo passo já fica marcado.
+              </p>
+            </>
           )}
 
           <div className="campo">
@@ -453,8 +446,8 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
             {!local && !buscandoLocal && (
               <div className="linha">
                 <span className="mini crescer">
-                  ⌖ {localErro ?? 'Sem localização do aparelho.'} A visita vai usar o endereço
-                  cadastrado do cliente.
+                  ⌖ {localErro ?? 'Sem localização do aparelho.'} A visita fica registrada como
+                  “sem GPS” e aparece assim para a gestão.
                 </span>
                 <button type="button" className="btn btn-sm" onClick={pegarLocalizacao}>
                   Tentar de novo

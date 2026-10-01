@@ -99,6 +99,19 @@ export const endpoints = {
   registrarContato: (id, dados) => api.post(`/clients/${id}/contato`, dados),
   excluirCliente: (id, forcar) => api.del(`/clients/${id}${forcar ? '?forcar=1' : ''}`),
 
+  // lead com prova: duplicado, CNPJ na Receita, print e abertura do WhatsApp
+  checarDuplicado: (params) => api.get(`/clients/checar${qs(params)}`),
+  consultarCnpj: (cnpj) => api.get(`/clients/cnpj/${String(cnpj).replace(/D/g, '')}`),
+  enviarPrint: (id, print) => api.post(`/clients/${id}/print`, { print }),
+  recusarPrint: (id, motivo) => api.post(`/clients/${id}/recusar-print`, { motivo }),
+  registrarWhatsApp: (id, followupId) => api.post(`/clients/${id}/whatsapp`, { followupId }),
+
+  // tela Hoje e motor de follow-up
+  hoje: () => api.get('/followups/hoje'),
+  placar: () => api.get('/followups/placar'),
+  concluirFollowup: (id, dados) => api.post(`/followups/${id}/concluir`, dados),
+  reagendarFollowup: (id, quando) => api.post(`/followups/${id}/reagendar`, { quando }),
+
   // visitas e vendas
   visitas: (params) => api.get(`/visits${qs(params)}`),
   registrarVisita: (dados) => api.post('/visits', dados),
@@ -115,6 +128,7 @@ export const endpoints = {
 
   // ranking e conteúdo
   ranking: (mes) => api.get(`/ranking${qs({ mes })}`),
+  rankingLeads: (periodo) => api.get(`/ranking/leads${qs({ periodo })}`),
   biblioteca: (params) => api.get(`/content/library${qs(params)}`),
   criarMaterial: (dados) => api.post('/content/library', dados),
   // Vídeo e áudio sobem em binário puro: base64 inflaria 33% e estouraria o
@@ -158,4 +172,16 @@ export const endpoints = {
   visaoGeral: (data) => api.get(`/gestor/visao-geral${qs({ data })}`),
   indicadores: (mes) => api.get(`/gestor/indicadores${qs({ mes })}`),
   kpisEquipe: (dias) => api.get(`/gestor/kpis${qs({ dias })}`),
+  semaforo: (data) => api.get(`/gestor/semaforo${qs({ data })}`),
+  trajeto: (userId, data) => api.get(`/gestor/vendedor/${userId}/trajeto${qs({ data })}`),
+
+  // auditoria semanal, ocorrências e termo de conduta
+  auditoria: () => api.get('/auditoria'),
+  sortearAuditoria: () => api.post('/auditoria/sortear'),
+  resultadoAuditoria: (id, resultado, notes) => api.post(`/auditoria/${id}/resultado`, { resultado, notes }),
+  ocorrencias: (vendedorId) => api.get(`/auditoria/ocorrencias${qs({ vendedorId })}`),
+  anularOcorrencia: (id, motivo) => api.post(`/auditoria/ocorrencias/${id}/anular`, { motivo }),
+  termo: () => api.get('/auditoria/termo'),
+  publicarTermo: (texto) => api.put('/auditoria/termo', { texto }),
+  aceitarTermo: (termoId) => api.post('/auditoria/termo/aceite', { termoId }),
 };

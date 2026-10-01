@@ -62,7 +62,9 @@ export function salvarDataUrl(dataUrl, prefixo = 'anexo') {
   const nome = `${prefixo}_${Date.now()}_${crypto.randomUUID().slice(0, 6)}.${extensao}`;
   fs.writeFileSync(path.join(UPLOAD_DIR, nome), buffer);
 
-  return { url: `/uploads/${nome}`, tipo: mime, tamanho: buffer.length };
+  // A impressão digital do arquivo denuncia o mesmo print enviado duas vezes
+  const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+  return { url: `/uploads/${nome}`, tipo: mime, tamanho: buffer.length, hash };
 }
 
 /**

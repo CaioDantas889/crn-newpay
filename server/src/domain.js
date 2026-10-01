@@ -136,7 +136,9 @@ export function calcularScore(diagnostico = {}) {
   }
   if (dores.includes('taxas_altas')) soma('dor_taxas', 'Reclama das taxas', 20);
 
-  const faixa = FATURAMENTOS[faturamento];
+  // No cadastro rápido o vendedor informa só o que passa no cartão: quem passa
+  // R$ 10 mil no cartão fatura pelo menos isso.
+  const faixa = FATURAMENTOS[faturamento] ?? FATURAMENTOS[diagnostico.faturamentoCartao];
   if (faixa && faixa.min >= 10000) {
     soma('faturamento_alto', `Fatura ${faixa.label.toLowerCase()}`, 20);
   }
@@ -231,12 +233,243 @@ export function avaliarVisita(cliente, { diasSemContato = 0, followupVencido = f
 
 /* --------------------------------------------------------------- visitas */
 
+// Lista fixa do resultado da visita: vale para o cadastro do lead, para a
+// revisita e para a conclusão de qualquer follow-up. A chave "fechado" (rótulo
+// "Fechou") é a mesma de antes, então venda continua abrindo negócio igual.
+// `stage: null` não mexe no funil; `encerraCadencia` para o motor de follow-up.
 export const RESULTADOS_VISITA = {
-  interessado:     { label: 'Interessado',      stage: 'negociacao', cor: '#16a34a', emoji: '✓' },
-  nao_interessado: { label: 'Não interessado',  stage: 'perdido',    cor: '#dc2626', emoji: '✕' },
-  fechado:         { label: 'Fechado',          stage: 'fechado',    cor: '#0d9488', emoji: '★' },
-  retornar:        { label: 'Retornar depois',  stage: 'contatado',  cor: '#eab308', emoji: '↻' },
+  fechado:     { label: 'Fechou',      stage: 'fechado',    temperatura: null,     cor: '#0d9488', emoji: '★', encerraCadencia: true },
+  quente:      { label: 'Quente',      stage: 'negociacao', temperatura: 'quente', cor: '#dc2626', emoji: '▲' },
+  morno:       { label: 'Morno',       stage: 'contatado',  temperatura: 'morno',  cor: '#f59e0b', emoji: '●' },
+  frio:        { label: 'Frio',        stage: 'contatado',  temperatura: 'frio',   cor: '#3b82f6', emoji: '○' },
+  sem_cnpj:    { label: 'Sem CNPJ',    stage: 'perdido',    temperatura: null,     cor: '#64748b', emoji: '⊘', encerraCadencia: true },
+  nao_atendeu: { label: 'Não atendeu', stage: null,         temperatura: null,     cor: '#868f9b', emoji: '◌' },
 };
+
+// Visitas gravadas antes da lista fixa: continuam aparecendo com o nome antigo.
+// `novo` é para onde a API manda quem ainda envia a chave antiga (app aberto
+// numa versão anterior).
+export const RESULTADOS_VISITA_ANTIGOS = {
+  interessado:     { label: 'Interessado',     stage: 'negociacao', cor: '#16a34a', emoji: '✓', novo: 'quente' },
+  nao_interessado: { label: 'Não interessado', stage: 'perdido',    cor: '#dc2626', emoji: '✕', novo: 'frio' },
+  retornar:        { label: 'Retornar depois', stage: 'contatado',  cor: '#eab308', emoji: '↻', novo: 'nao_atendeu' },
+};
+
+export const resultadoVisita = (chave) =>
+  RESULTADOS_VISITA[chave] ?? RESULTADOS_VISITA_ANTIGOS[chave] ?? null;
+
+// Visita produtiva é a que deixa o lojista mais perto de comprar
+export const RESULTADOS_PRODUTIVOS = ['fechado', 'quente', 'interessado'];
+export const RESULTADOS_PERDIDOS = ['sem_cnpj', 'nao_interessado'];
+
+/**
+ * Etapa do funil depois de um resultado. Só anda para a frente — "Morno" num
+ * cliente em proposta não devolve ele para "contatado". Fechado e perdido
+ * valem sempre, e cliente perdido que voltou a conversar sai de "perdido".
+ */
+export function etapaDepoisDe(atual, alvo) {
+  if (!alvo || alvo === atual) return atual;
+  if (alvo === 'fechado' || alvo === 'perdido' || atual === 'perdido') return alvo;
+  return (FUNIL[alvo]?.ordem ?? 0) > (FUNIL[atual]?.ordem ?? 0) ? alvo : atual;
+}
+
+/**
+ * O vendedor disse "quente"? A pontuação fica dentro da faixa que ele
+ * declarou, para a bolinha de score e a temperatura não se contradizerem.
+ * O diagnóstico completo, quando preenchido, recalcula do zero.
+ */
+export function scoreNaFaixa(score, temperatura) {
+  const faixa = TEMPERATURES[temperatura];
+  if (!faixa) return score;
+  return Math.min(faixa.max, Math.max(faixa.min, Number(score) || 0));
+}
+
+/* ------------------------------------------------- meta diária de leads -- */
+// Três regras resumem a operação: a meta não pode ser esquecida, a visita não
+// pode ser inventada e o lead não pode morrer. Os números delas moram aqui.
+
+export const META_LEADS = {
+  total: 30,          // leads novos por dia
+  minPresenciais: 20, // dos 30, no mínimo 20 com visita
+  maxRemotos: 10,     // remoto acima disso fica salvo, mas não soma
+  fimDoDia: 18,       // "quanto tempo resta no dia": até o resumo das 18h
+};
+
+// Domingo não tem meta, semáforo nem lembrete de ritmo
+export const ehDiaDeTrabalho = (d) => new Date(d).getDay() !== 0;
+
+export const ORIGENS_LEAD = {
+  presencial: { label: 'Presencial', descricao: 'Visita na loja', prova: 'GPS + horário + foto da fachada' },
+  remoto:     { label: 'Remoto',     descricao: 'Indicação ou WhatsApp', prova: 'CNPJ válido + print da conversa' },
+};
+
+export const CANAIS_REMOTO = {
+  indicacao: 'Indicação',
+  whatsapp:  'Contato WhatsApp',
+};
+
+export const DECLARACAO_REMOTO =
+  'Declaro que este contato é real, foi abordado por mim e autorizou o contato da NewPay.';
+
+export const AVISO_FANTASMA = 'Lead fantasma = falta grave. Todo lead pode ser auditado.';
+
+// Presencial nasce validado: a prova (GPS, horário, foto) vem no cadastro.
+// Remoto nasce pendente e só valida com CNPJ ativo + print com resposta.
+export const STATUS_LEAD = {
+  validado: { label: 'Validado', contaNaMeta: true,  cor: '#0f9d63' },
+  pendente: { label: 'Pendente', contaNaMeta: false, cor: '#868f9b' },
+  suspeito: { label: 'Suspeito', contaNaMeta: false, cor: '#d97706' },
+  fantasma: { label: 'Fantasma', contaNaMeta: false, cor: '#dc2626' },
+};
+
+// Remoto validado vira suspeito (e sai da contagem) quando abandona o
+// follow-up ou não sai do lugar no funil.
+export const SUSPEITA_REMOTO = {
+  diasFollowupAtrasado: 7,
+  diasSemAvanco: 30,
+};
+
+/* ----------------------------------------------------- motor de follow-up */
+// Todo lead que não fechou gera a próxima tarefa sozinho, contada a partir do
+// cadastro. A cadência para quando o lead fecha, vira "Sem CNPJ" ou fantasma.
+
+export const CADENCIA = [
+  { etapa: 'd1',  dia: 1,  acao: 'whatsapp',      label: 'WhatsApp com a comparação de taxa', apoio: 'Modelo de mensagem pronto, 1 clique' },
+  { etapa: 'd3',  dia: 3,  acao: 'ligacao',       label: 'Ligação',                           apoio: 'Botão de ligar + roteiro curto' },
+  { etapa: 'd7',  dia: 7,  acao: 'revisita',      label: 'Revisita',                          apoio: 'Endereço e rota no mapa' },
+  { etapa: 'd15', dia: 15, acao: 'resgate',       label: 'Resgate',                           apoio: 'Modelo de mensagem de retomada' },
+  { etapa: 'd30', dia: 30, acao: 'resgate_final', label: 'Resgate final',                     apoio: 'Lead vai para "frio" se não avançar' },
+];
+
+export const HORA_FOLLOWUP = 9; // horário padrão da tarefa quando o lojista não marcou
+
+// Crédito à vista da campanha vigente: base da comparação de taxa
+export const TAXA_NEWPAY = 1.89;
+
+export const MODELOS_MENSAGEM = {
+  comparacao:
+    'Olá, {nome}! Aqui é {vendedor}, da NewPay. Como combinamos, fiz a comparação para a {empresa}: {comparacao} ' +
+    'Posso passar aí para te mostrar a maquininha?',
+  retomada:
+    'Olá, {nome}! Aqui é {vendedor}, da NewPay. Passando para retomar nossa conversa sobre a maquininha da {empresa}. ' +
+    'Esta semana consegui uma condição boa para você. Tem 5 minutos para eu te mostrar?',
+};
+
+export const ROTEIRO_LIGACAO = [
+  'Apresente-se: "Oi, {nome}, aqui é {vendedor}, da NewPay. Estive aí na {empresa}."',
+  'Lembre a dor: "Você comentou da taxa da {maquina}. Te mandei a comparação no WhatsApp, deu para ver?"',
+  'Descubra o que falta: "O que te impede de testar a NewPay do lado da máquina que você já tem?"',
+  'Feche o próximo passo: dia e hora para levar a maquininha. Registre o resultado aqui no CRM.',
+];
+
+/* ------------------------------------------------- semáforo do gestor ---- */
+
+export const SEMAFORO = {
+  vermelho: { label: 'Vermelho', ordem: 1, cor: '#dc2626' },
+  amarelo:  { label: 'Amarelo',  ordem: 2, cor: '#d97706' },
+  verde:    { label: 'Verde',    ordem: 3, cor: '#0f9d63' },
+};
+
+export const REGRAS_SEMAFORO = {
+  minLeadsAmarelo: 20,     // abaixo disso, vermelho
+  maxAtrasadosAmarelo: 5,  // acima disso, vermelho
+  maxPctSuspeitos: 30,     // % de remotos suspeitos acima disso, vermelho
+  // Suspeita só aparece 7 dias depois do cadastro, então o percentual olha os
+  // remotos em acompanhamento (cadência de 30 dias), não só os da semana.
+  janelaSuspeitosDias: 30,
+  janelaFantasmaDias: 7,   // fantasma confirmado nos últimos 7 dias pinta de vermelho
+};
+
+/**
+ * Cor do dia de um vendedor e o porquê. Vermelho é avaliado primeiro: basta
+ * uma condição. Verde exige tudo. O resto é amarelo.
+ */
+export function corDoSemaforo({ leads, presenciais, atrasados, pctSuspeitos, fantasmas }) {
+  const r = REGRAS_SEMAFORO;
+  const vermelhos = [];
+  if (leads < r.minLeadsAmarelo) vermelhos.push(`${leads} leads (mínimo ${r.minLeadsAmarelo})`);
+  if (atrasados > r.maxAtrasadosAmarelo) vermelhos.push(`${atrasados} follow-ups atrasados`);
+  if (pctSuspeitos > r.maxPctSuspeitos) vermelhos.push(`${pctSuspeitos}% dos remotos suspeitos`);
+  if (fantasmas > 0) vermelhos.push(`${fantasmas} lead(s) fantasma confirmado(s)`);
+  if (vermelhos.length) return { cor: 'vermelho', motivos: vermelhos };
+
+  const verde =
+    leads >= META_LEADS.total && presenciais >= META_LEADS.minPresenciais && atrasados === 0;
+  if (verde) return { cor: 'verde', motivos: ['meta completa e follow-up em dia'] };
+
+  const motivos = [];
+  if (leads < META_LEADS.total) motivos.push(`${leads} de ${META_LEADS.total} leads`);
+  else if (presenciais < META_LEADS.minPresenciais) {
+    motivos.push(`${presenciais} presenciais (mínimo ${META_LEADS.minPresenciais})`);
+  }
+  if (atrasados > 0) motivos.push(`${atrasados} follow-up(s) atrasado(s)`);
+  return { cor: 'amarelo', motivos };
+}
+
+/* ------------------------------------------------- alertas de suspeita --- */
+// Alerta não bloqueia nada: aponta para o gestor olhar. Os limites ficam aqui
+// para calibrar com a rua (galeria de lojas tem vizinho a menos de 30 m).
+
+export const ALERTAS_SUSPEITA = {
+  raioMesmoPontoM: 30,
+  minVisitasMesmoPonto: 3,      // "várias visitas no mesmo ponto"
+  minutosEntreVisitas: 3,
+  raioRegiaoKmPadrao: 60,       // região do vendedor: raio em volta da base
+  minRemotosSemVenda: 5,        // remotos com conversão zero enquanto presencial converte
+  remotosEmSequencia: 4,        // tantos remotos...
+  minutosSequenciaRemotos: 10,  // ...dentro desta janela
+  distanciaPrintParecido: 16,   // bits diferentes (de 256) para print "muito parecido"
+};
+
+export const TIPOS_ALERTA = {
+  gps_mesmo_ponto:   'Várias visitas no mesmo ponto',
+  intervalo_curto:   'Visitas com menos de 3 minutos',
+  fora_da_regiao:    'Visita fora da região',
+  gps_impreciso:     'GPS impreciso',
+  sem_gps:           'Revisita sem GPS',
+  conversao_remota:  'Remotos sem conversão',
+  print_repetido:    'Print repetido',
+  print_parecido:    'Print muito parecido',
+  remotos_sequencia: 'Remotos em sequência',
+};
+
+/* ------------------------------------------------- lembretes de ritmo ---- */
+// Avaliados a cada consulta da central (sem job em segundo plano). Cada
+// lembrete vale do seu horário até o próximo; o das 11h e o das 15h somem
+// sozinhos quando o vendedor recupera o ritmo.
+
+export const LEMBRETES_RITMO = [
+  { hora: 8,  ate: 11, chave: '8h' },
+  { hora: 11, ate: 15, chave: '11h', abaixoDe: 8 },
+  { hora: 15, ate: 18, chave: '15h', abaixoDe: 18 },
+  { hora: 18, ate: 24, chave: '18h' },
+];
+
+export const HORA_RESUMO_GESTOR = 19;
+
+/* ------------------------------------------------------------ auditoria -- */
+
+export const AUDITORIA = {
+  remotosPorVendedor: 3,
+  presenciaisPorVendedor: 1,
+};
+
+export const RESULTADOS_AUDITORIA = {
+  confirmado:    { label: 'Confirmado' },
+  nao_reconhece: { label: 'Não reconhece o contato' },
+};
+
+// Ponto de partida para a gestão: o texto oficial é da NewPay e substitui este
+// pela tela de Auditoria antes de publicar.
+export const TERMO_CONDUTA_MODELO = `MODELO — substitua pelo texto oficial da NewPay antes de publicar.
+
+TERMO DE CONDUTA DO VENDEDOR EXTERNO
+
+1. Todo lead cadastrado no CRM corresponde a um contato real, feito por mim, com um comerciante que autorizou o contato da NewPay.
+2. A visita presencial é registrada no local, com GPS, horário e foto da fachada tirada na hora pela câmera do aplicativo.
+3. O lead remoto é registrado com CNPJ ativo e com o print da conversa em que o lojista responde.
+4. Estou ciente de que qualquer lead pode ser auditado pela NewPay, por telefone, a qualquer momento.
+5. Lead fantasma (contato inventado, duplicado de propósito ou não reconhecido pelo lojista) é falta grave e pode levar a advertência, perda de bonificação ou rescisão, conforme o contrato.`;
 
 /* ------------------------------------------------ níveis do ranking ---- */
 // A NewPay paga salário fixo ao vendedor externo: não existe cálculo de

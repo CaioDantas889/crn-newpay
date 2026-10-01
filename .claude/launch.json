@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "newpay-start",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 4000
     }
   ]
 }

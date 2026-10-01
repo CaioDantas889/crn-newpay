@@ -39,6 +39,22 @@ export const Vazio = ({ emoji = '◌', titulo, texto, acao }) => (
   </div>
 );
 
+/**
+ * A consulta falhou e não há nada para mostrar: diz o motivo em vez de deixar
+ * a tela carregando para sempre. O caso clássico é o servidor ainda na versão
+ * anterior logo depois de uma atualização.
+ */
+export const Falha = ({ erro, titulo = 'Não consegui carregar esta tela' }) => (
+  <div className="card">
+    <Vazio
+      emoji="⚠︎"
+      titulo={titulo}
+      texto={`${erro} Se o CRM acabou de ser atualizado, o servidor precisa ser reiniciado.`}
+      acao={<button className="btn btn-primary" onClick={() => window.location.reload()}>Tentar de novo</button>}
+    />
+  </div>
+);
+
 export const Carregando = ({ linhas = 3 }) => (
   <div className="card-pad coluna">
     {Array.from({ length: linhas }, (_, i) => (

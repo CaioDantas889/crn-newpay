@@ -116,6 +116,16 @@ git pull && docker compose up -d --build
 
 O volume não é tocado: os dados continuam.
 
+Quando a atualização traz mudança no formato dos dados, o servidor ajusta o
+banco sozinho ao subir (`server/src/migracoes.js`) e avisa no log — por
+exemplo, os follow-ups que estavam como compromisso na agenda passam para a
+tela "Hoje", onde só saem com resultado. O backup rotativo guarda o arquivo de
+antes. Para conferir: `docker compose logs crm | grep migração`.
+
+O container roda no fuso `America/Fortaleza` (variável `TZ`): é ele que define
+o "hoje" da meta diária e a hora dos lembretes. Confira com
+`docker compose exec crm date`.
+
 **Repor o acesso de administração** (senha perdida, ou ninguém logado para
 cadastrar pela tela). O servidor precisa sair do ar por um minuto — a trava do
 banco não deixa dois processos gravando:

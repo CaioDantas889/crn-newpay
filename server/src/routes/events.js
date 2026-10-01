@@ -4,6 +4,7 @@ import { isManager, requireAuth, visibleUserIds } from '../auth.js';
 import { EVENT_STATUS, EVENT_TYPE_KEYS, reachesUser } from '../domain.js';
 import { expandEvent } from '../serializers.js';
 import { endOfDay, startOfDay } from '../lib/dates.js';
+import { expandirFollowup } from '../followups.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -56,6 +57,13 @@ router.get('/dia/:data', (req, res) => {
     .filter((t) => t.ownerId === alvo && t.dueAt && new Date(t.dueAt) >= ini && new Date(t.dueAt) <= fim)
     .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
 
+  // Follow-ups da cadência que vencem neste dia: não são compromisso de agenda
+  // (só saem com resultado), mas o vendedor precisa vê-los ao planejar o dia.
+  const followups = table('followups')
+    .filter((f) => f.userId === alvo && f.status === 'pendente' && new Date(f.dueAt) >= ini && new Date(f.dueAt) <= fim)
+    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt))
+    .map((f) => expandirFollowup(f));
+
   const realizadas = eventos.filter((e) => e.type === 'visita' && e.status === 'realizado').length;
   const dono = find('users', alvo);
 
@@ -63,6 +71,7 @@ router.get('/dia/:data', (req, res) => {
     data: req.params.data,
     eventos,
     tarefas,
+    followups,
     resumo: {
       total: eventos.length,
       realizados: eventos.filter((e) => e.status === 'realizado').length,
