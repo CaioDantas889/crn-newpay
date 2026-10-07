@@ -165,6 +165,7 @@ export default function AppShell() {
                         <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                         <span className="mini">
                           {c.city} · {c.stageMeta?.label}
+                          {ehGestor && c.owner ? ` · ${c.owner.name.split(' ')[0]}` : ''}
                         </span>
                       </div>
                     </div>

@@ -11,7 +11,7 @@ const duracaoMin = (ini, fim) => Math.max(15, Math.round((new Date(fim) - new Da
  * Criação e edição de compromisso. O gestor ganha os campos de agenda
  * corporativa (público-alvo e confirmação de presença obrigatória).
  */
-export default function EventoModal({ evento, dataPadrao, onFechar, onSalvo }) {
+export default function EventoModal({ evento, dataPadrao, ownerId, onFechar, onSalvo }) {
   const { meta, ehGestor, toast } = useApp();
   const editando = Boolean(evento?.id);
 
@@ -54,6 +54,8 @@ export default function EventoModal({ evento, dataPadrao, onFechar, onSalvo }) {
       notes: form.notes,
       clientId: form.clientId || null,
     };
+    // Gestor olhando a agenda de um vendedor: o compromisso novo é do vendedor
+    if (ownerId && !editando) payload.ownerId = ownerId;
 
     if (ehGestor && form.scope === 'corporativo') {
       Object.assign(payload, {

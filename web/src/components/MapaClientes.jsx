@@ -11,7 +11,8 @@ import { Carregando } from './ui.jsx';
 
 const CORES = { quente: '#dc2626', morno: '#f59e0b', frio: '#3b82f6' };
 
-export default function MapaClientes() {
+/** `userId` vem da carteira: a gestão escolhe de quem é o mapa (vazio = equipe inteira) */
+export default function MapaClientes({ userId }) {
   const navigate = useNavigate();
   const { toast } = useApp();
   const [raio, setRaio] = useState(3);
@@ -19,8 +20,8 @@ export default function MapaClientes() {
   const [selecionado, setSelecionado] = useState(null);
 
   const { dados, carregando } = useRecurso(
-    () => endpoints.mapa({ raio, lat: posicao?.lat, lng: posicao?.lng }),
-    [raio, posicao?.lat, posicao?.lng]
+    () => endpoints.mapa({ raio, lat: posicao?.lat, lng: posicao?.lng, userId }),
+    [raio, posicao?.lat, posicao?.lng, userId]
   );
 
   const usarMinhaLocalizacao = () => {
@@ -63,7 +64,7 @@ export default function MapaClientes() {
         <div>
           <h3>{dados.destaque}</h3>
           <p>
-            {dados.totais.leads} leads e {dados.totais.ativos} clientes ativos na sua carteira.
+            {dados.totais.leads} leads e {dados.totais.ativos} clientes ativos {userId ? 'nesta carteira' : 'na carteira'}.
           </p>
         </div>
         <div className="linha" style={{ flexWrap: 'wrap' }}>

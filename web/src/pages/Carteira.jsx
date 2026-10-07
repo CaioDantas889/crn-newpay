@@ -1,13 +1,16 @@
-// Carteira: lista filtrável, funil e mapa de clientes.
+// Carteira: lista filtrável, funil, mapa e visitas registradas.
+// O vendedor vê a própria carteira. A gestão vê a equipe inteira e filtra por
+// vendedor — é daqui que ela acompanha cliente e visita de todo mundo.
 
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
-import { moeda } from '../lib/date.js';
 import { Carregando, Vazio } from '../components/ui.jsx';
 import NovoCliente from '../components/NovoCliente.jsx';
+import NovoLead from '../components/NovoLead.jsx';
 import MapaClientes from '../components/MapaClientes.jsx';
+import VisitasLista from '../components/VisitasLista.jsx';
 
 const ORDENS = [
   { chave: 'score', label: 'Oportunidade' },
@@ -15,8 +18,15 @@ const ORDENS = [
   { chave: 'nome', label: 'A–Z' },
 ];
 
+const ABAS = [
+  { chave: 'lista', label: 'Lista' },
+  { chave: 'funil', label: 'Funil' },
+  { chave: 'mapa', label: 'Mapa' },
+  { chave: 'visitas', label: 'Visitas' },
+];
+
 export default function Carteira() {
-  const { meta } = useApp();
+  const { meta, user, ehGestor } = useApp();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
@@ -25,39 +35,93 @@ export default function Carteira() {
   const [temperatura, setTemperatura] = useState(params.get('temperatura') ?? '');
   const [stage, setStage] = useState(params.get('stage') ?? '');
   const [ordem, setOrdem] = useState(params.get('ordem') ?? 'score');
+  // Gestão: '' = equipe inteira, id de um vendedor, ou o próprio id (minha carteira)
+  const [vendedor, setVendedor] = useState(params.get('userId') ?? '');
   const [novo, setNovo] = useState(false);
 
-  const filtros = { busca, temperatura, stage, ordem };
-  const { dados: clientes, carregando, recarregar } = useRecurso(
-    () => endpoints.clientes(filtros),
-    [busca, temperatura, stage, ordem]
+  const { dados: equipe } = useRecurso(
+    () => (ehGestor ? endpoints.equipe() : Promise.resolve([])),
+    [ehGestor]
   );
-  const { dados: funil } = useRecurso(() => endpoints.funil(), [aba === 'funil']);
 
-  const trocarAba = (nova) => {
-    setAba(nova);
+  const userId = ehGestor && vendedor ? vendedor : undefined;
+  const { dados: clientes, carregando, recarregar } = useRecurso(
+    () => endpoints.clientes({ busca, temperatura, stage, ordem, userId }),
+    [busca, temperatura, stage, ordem, userId]
+  );
+  const { dados: funil } = useRecurso(() => endpoints.funil(userId), [aba === 'funil', userId]);
+
+  const gravarParam = (chave, valor) => {
     const p = new URLSearchParams(params);
-    p.set('aba', nova);
+    if (valor) p.set(chave, valor);
+    else p.delete(chave);
     setParams(p, { replace: true });
   };
 
+  const trocarAba = (nova) => {
+    setAba(nova);
+    gravarParam('aba', nova);
+  };
+
+  const trocarVendedor = (id) => {
+    setVendedor(id);
+    gravarParam('userId', id);
+  };
+
   const lista = clientes ?? [];
+  const vendedores = (equipe ?? []).filter((u) => u.role === 'vendedor');
+  const escolhido = vendedores.find((v) => v.id === vendedor);
+  const equipeInteira = ehGestor && !vendedor;
+
+  const titulo = !ehGestor
+    ? 'Carteira'
+    : vendedor === user.id
+      ? 'Minha carteira'
+      : escolhido
+        ? `Carteira de ${escolhido.name.split(' ')[0]}`
+        : 'Carteira da equipe';
+
+  const botaoNovo = (
+    <button className="btn btn-primary" onClick={() => setNovo(true)}>
+      {ehGestor ? '+ Novo cliente' : '+ Novo lead'}
+    </button>
+  );
 
   return (
     <div className="page">
       <div className="entre">
         <div>
-          <h1>Carteira</h1>
-          <p className="mini">{lista.length} cliente(s) · ordenados por {ORDENS.find((o) => o.chave === ordem)?.label.toLowerCase()}</p>
+          <h1>{titulo}</h1>
+          <p className="mini">
+            {lista.length} cliente(s) · ordenados por {ORDENS.find((o) => o.chave === ordem)?.label.toLowerCase()}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setNovo(true)}>+ Novo cliente</button>
+        <div className="linha">
+          {ehGestor && (
+            <select
+              className="select select-inline"
+              value={vendedor}
+              onChange={(e) => trocarVendedor(e.target.value)}
+              aria-label="De quem é a carteira"
+            >
+              <option value="">Equipe inteira</option>
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+              <option value={user.id}>Minha carteira</option>
+            </select>
+          )}
+          {botaoNovo}
+        </div>
       </div>
 
       <div className="card">
         <div className="abas">
-          <button className={`aba${aba === 'lista' ? ' ativa' : ''}`} onClick={() => trocarAba('lista')}>Lista</button>
-          <button className={`aba${aba === 'funil' ? ' ativa' : ''}`} onClick={() => trocarAba('funil')}>Funil</button>
-          <button className={`aba${aba === 'mapa' ? ' ativa' : ''}`} onClick={() => trocarAba('mapa')}>Mapa</button>
+          {ABAS.map((a) => (
+            <button key={a.chave} className={`aba${aba === a.chave ? ' ativa' : ''}`} onClick={() => trocarAba(a.chave)}>
+              {a.label}
+            </button>
+          ))}
         </div>
 
         {aba === 'lista' && (
@@ -117,8 +181,12 @@ export default function Carteira() {
               <Vazio
                 emoji="⌕"
                 titulo="Nenhum cliente encontrado"
-                texto="Ajuste os filtros ou cadastre um novo cliente."
-                acao={<button className="btn btn-brand" onClick={() => setNovo(true)}>+ Novo cliente</button>}
+                texto={
+                  equipeInteira
+                    ? 'Ajuste os filtros ou cadastre um cliente para um vendedor.'
+                    : 'Ajuste os filtros ou cadastre um novo cliente.'
+                }
+                acao={botaoNovo}
               />
             ) : (
               lista.map((c) => (
@@ -135,6 +203,8 @@ export default function Carteira() {
                     <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
                     <span className="mini truncar" style={{ display: 'block' }}>
                       {c.segmentoLabel} · {c.city}
+                      {/* Na carteira da equipe cada linha diz de quem é */}
+                      {equipeInteira && c.owner ? ` · ${c.owner.name.split(' ')[0]}` : ''}
                       {c.leadStatus && c.leadStatus !== 'validado' && (
                         <span className={`chip chip-status ${c.leadStatus}`} style={{ marginLeft: 6 }}>{c.leadStatus}</span>
                       )}
@@ -198,11 +268,15 @@ export default function Carteira() {
           </div>
         )}
 
-        {aba === 'mapa' && <MapaClientes />}
+        {aba === 'mapa' && <MapaClientes userId={userId} />}
+
+        {aba === 'visitas' && <VisitasLista userId={userId} dataInicial={params.get('data') ?? undefined} />}
       </div>
 
-      {novo && (
+      {/* A gestão cadastra direto na carteira (sem prova); o vendedor cadastra lead com prova */}
+      {novo && ehGestor && (
         <NovoCliente
+          ownerIdPadrao={vendedor && vendedor !== user.id ? vendedor : ''}
           onFechar={() => setNovo(false)}
           onCriado={(cliente) => {
             recarregar();
@@ -210,6 +284,7 @@ export default function Carteira() {
           }}
         />
       )}
+      {novo && !ehGestor && <NovoLead onFechar={() => setNovo(false)} onCriado={recarregar} />}
     </div>
   );
 }

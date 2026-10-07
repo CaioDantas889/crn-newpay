@@ -33,9 +33,17 @@ router.post('/', (req, res) => {
   if (!title?.trim()) return res.status(400).json({ error: 'Descreva a tarefa.' });
   if (!TASK_KINDS.includes(kind)) return res.status(400).json({ error: 'Tipo de tarefa inválido.' });
 
+  // A gestão pode deixar a tarefa na agenda de um vendedor
+  let ownerId = req.user.id;
+  if (req.body?.ownerId && req.body.ownerId !== req.user.id) {
+    if (!isManager(req.user)) return res.status(403).json({ error: 'Só a gestão cria tarefa para outra pessoa.' });
+    if (!find('users', req.body.ownerId)) return res.status(400).json({ error: 'Pessoa não encontrada.' });
+    ownerId = req.body.ownerId;
+  }
+
   const tarefa = insert('tasks', {
     id: id('tsk'),
-    ownerId: req.user.id,
+    ownerId,
     title: title.trim(),
     kind,
     dueAt: dueAt ? new Date(dueAt).toISOString() : null,

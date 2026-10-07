@@ -10,7 +10,7 @@ import { config } from './config.js';
 import path from 'node:path';
 import { addDays, atHour, dateKey, startOfDay } from './lib/dates.js';
 import {
-  CADENCIA, DECLARACAO_REMOTO, HORA_FOLLOWUP, RESULTADOS_VISITA, TABELAS_TAXA,
+  CADENCIA, DECLARACAO_REMOTO, HORA_FOLLOWUP, MODELOS_MAQUINA, RESULTADOS_VISITA, TABELAS_TAXA,
   calcularScore, ehDiaDeTrabalho, scoreNaFaixa, temperaturaPorScore,
 } from './domain.js';
 import { UPLOAD_DIR } from './lib/uploads.js';
@@ -296,6 +296,24 @@ for (let d = -45; d <= -5; d++) {
 
 const deals = [];
 
+// Número de série no padrão da etiqueta; de vez em quando falta um, para a
+// ficha mostrar a pendência. Ativação antiga já vem confirmada pela gestão;
+// uma ou outra fica "declarada", esperando o painel do gestor.
+const serieDemo = () => `NP${int(10_000_000, 99_999_999)}${int(100, 999)}`;
+const modeloDemo = () => pick(Object.keys(MODELOS_MAQUINA));
+const seriesDemo = (maquinas, vendida) =>
+  !vendida ? [] : Array.from({ length: chance(0.8) ? maquinas : Math.max(0, maquinas - 1) }, serieDemo);
+const ativacaoDemo = (ativado, ativacaoAt, userId) => {
+  if (!ativado) return {};
+  const confirmada = chance(0.85);
+  return {
+    ativacaoDeclaradaAt: ativacaoAt,
+    ativacaoDeclaradaPor: userId,
+    ativacaoConfirmadaAt: confirmada ? ativacaoAt : null,
+    ativacaoConfirmadaPor: confirmada ? 'usr_gestor' : null,
+  };
+};
+
 for (const cli of clients) {
   if (!['proposta', 'negociacao', 'fechado'].includes(cli.stage)) continue;
 
@@ -304,6 +322,7 @@ for (const cli of clients) {
 
   const fechado = cli.stage === 'fechado';
   const ativado = fechado && chance(0.8);
+  const ativacaoAt = ativado ? iso(addDays(propostaEm, int(2, 14))) : null;
 
   deals.push({
     id: id('deal'),
@@ -311,35 +330,57 @@ for (const cli of clients) {
     userId: cli.ownerId,
     maquinas,
     taxaOfertada: pick(TABELAS_TAXA),
+    modelo: modeloDemo(),
+    series: seriesDemo(maquinas, fechado),
     status: ativado ? 'ativado' : fechado ? 'fechado' : cli.stage === 'negociacao' ? 'negociacao' : 'proposta',
     propostaAt: iso(propostaEm),
     fechamentoAt: fechado ? iso(addDays(propostaEm, int(1, 10))) : null,
-    ativacaoAt: ativado ? iso(addDays(propostaEm, int(2, 14))) : null,
+    ativacaoAt,
+    ...ativacaoDemo(ativado, ativacaoAt, cli.ownerId),
     notes: '',
     createdAt: iso(propostaEm),
   });
 }
 
-// Garante volume de vendas no mês corrente para o dashboard e o ranking
+// Garante volume de vendas no mês corrente para o dashboard e o ranking.
+// Cliente que tinha proposta aberta: é ela que vira a venda (um registro só).
 for (const v of vendedores) {
   const meus = clientesDe(v.id);
   const extras = v.id === 'usr_carlos' ? 7 : v.id === 'usr_fernanda' ? 6 : int(3, 5);
   for (let i = 0; i < extras; i++) {
     const cli = pick(meus);
     const quando = addDays(hoje, -int(0, hoje.getDate() - 1));
-    const maquinas = int(1, 2);
+    const ativado = chance(0.75);
+    const ativacaoAt = iso(addDays(quando, 1));
+    const aberta = deals.find((d) => d.clientId === cli.id && ['proposta', 'negociacao'].includes(d.status));
+    const maquinas = aberta?.maquinas ?? int(1, 2);
+    const venda = {
+      maquinas,
+      series: seriesDemo(maquinas, true),
+      status: ativado ? 'ativado' : 'fechado',
+      fechamentoAt: iso(quando),
+      ativacaoAt: ativado ? ativacaoAt : null,
+      ...ativacaoDemo(ativado, ativacaoAt, v.id),
+    };
+    // Quem comprou está em "fechado" no funil, com as máquinas na ficha
+    cli.stage = 'fechado';
+    cli.stageChangedAt = iso(quando);
+    cli.machines = (cli.machines || 0) + maquinas;
+    if ('cadenciaEncerrada' in cli && !cli.cadenciaEncerrada) cli.cadenciaEncerrada = 'fechado';
+    if (aberta) {
+      Object.assign(aberta, venda);
+      continue;
+    }
     deals.push({
       id: id('deal'),
       clientId: cli.id,
       userId: v.id,
-      maquinas,
       taxaOfertada: pick(TABELAS_TAXA),
-      status: chance(0.75) ? 'ativado' : 'fechado',
+      modelo: modeloDemo(),
       propostaAt: iso(addDays(quando, -int(1, 6))),
-      fechamentoAt: iso(quando),
-      ativacaoAt: iso(addDays(quando, 1)),
       notes: '',
       createdAt: iso(quando),
+      ...venda,
     });
   }
 }
@@ -786,6 +827,7 @@ function venderPara(lead, quando) {
   lead.cadenciaEncerrada = 'fechado';
   deals.push({
     id: id('deal'), clientId: lead.id, userId: lead.ownerId, maquinas: 1, taxaOfertada: pick(TABELAS_TAXA),
+    modelo: modeloDemo(), series: seriesDemo(1, true),
     status: 'fechado', propostaAt: iso(quando), fechamentoAt: iso(quando), ativacaoAt: null,
     notes: '', createdAt: iso(quando),
   });

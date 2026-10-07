@@ -7,7 +7,7 @@ import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { isoDoInput } from '../lib/contato.js';
 import { Modal } from './ui.jsx';
-import { LojistaMarcou } from './lead.jsx';
+import { LojistaMarcou, VENDA_VAZIA, VendaCampos, faltaNaVenda } from './lead.jsx';
 
 /** Reduz a foto antes de enviar: o celular do vendedor costuma estar no 4G */
 function comprimirImagem(file, maxLado = 1280, qualidade = 0.72) {
@@ -74,7 +74,7 @@ function verificarSuporteAudio() {
 }
 
 export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFechar, onRegistrado }) {
-  const { meta, toast, recarregarNotificacoes, recarregarPlacar } = useApp();
+  const { meta, toast, recarregarNotificacoes, recarregarPlacar, ehGestor } = useApp();
   const navigate = useNavigate();
 
   const [cliente, setCliente] = useState(clienteInicial ?? null);
@@ -88,7 +88,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const [preparandoAudio, setPreparandoAudio] = useState(false);
   const [audioErro, setAudioErro] = useState(null);
   const [proximoEm, setProximoEm] = useState('');
-  const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: '' });
+  const [venda, setVenda] = useState(VENDA_VAZIA);
   const [local, setLocal] = useState(null);
   const [localErro, setLocalErro] = useState(null);
   const [buscandoLocal, setBuscandoLocal] = useState(false);
@@ -207,6 +207,10 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const salvar = async () => {
     if (!cliente) return toast('Escolha o cliente visitado.', 'erro');
     if (!resultado) return toast('Informe o resultado da visita.', 'erro');
+    if (resultado === 'fechado') {
+      const falta = faltaNaVenda(venda);
+      if (falta) return toast(falta, 'erro');
+    }
 
     setSalvando(true);
     try {
@@ -225,7 +229,9 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
         lng: local?.lng,
         precisao: local?.precisao,
         proximoEm: isoDoInput(proximoEm),
-        venda: resultado === 'fechado' ? venda : undefined,
+        venda: resultado === 'fechado'
+          ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
+          : undefined,
       });
 
       const dataRetorno = resposta.retorno
@@ -234,7 +240,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
 
       toast(
         resultado === 'fechado'
-          ? `Venda registrada! ${venda.maquinas} máquina(s).`
+          ? `Venda registrada! ${resposta.negocio?.maquinas ?? venda.maquinas} máquina(s). Agora é ativar.`
           : dataRetorno
             ? `Visita registrada. Próximo follow-up em ${dataRetorno}.`
             : 'Visita registrada.'
@@ -287,7 +293,10 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
                 <span className={`score-bola ${c.temperature}`}>{c.score}</span>
                 <div className="info">
                   <b className="truncar" style={{ display: 'block' }}>{c.company}</b>
-                  <span className="mini">{c.name} · {c.city} · {c.diasSemContato}d sem contato</span>
+                  <span className="mini">
+                    {ehGestor && c.owner ? `${c.owner.name.split(' ')[0]} · ` : ''}
+                    {c.name} · {c.city} · {c.diasSemContato}d sem contato
+                  </span>
                 </div>
               </div>
             ))}
@@ -322,35 +331,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
           </div>
 
           {resultado === 'fechado' && (
-            <div className="card card-pad coluna" style={{ background: 'var(--ok-bg)', borderColor: 'var(--ok-line)' }}>
-              <b>Dados da venda</b>
-              <div className="form-linha duas">
-                <div className="campo">
-                  <label htmlFor="rv-maq">Máquinas vendidas</label>
-                  <input
-                    id="rv-maq" type="number" min="1" className="input" value={venda.maquinas}
-                    onChange={(e) => setVenda({ ...venda, maquinas: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="campo">
-                  <label htmlFor="rv-taxa">Tabela de taxa</label>
-                  <select
-                    id="rv-taxa"
-                    className="select"
-                    value={venda.taxaOfertada}
-                    onChange={(e) => setVenda({ ...venda, taxaOfertada: e.target.value })}
-                  >
-                    <option value="">Escolha a tabela</option>
-                    {(meta?.tabelasTaxa ?? []).map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <p className="mini">
-                Entra na sua meta do mês quando a máquina for ativada.
-              </p>
-            </div>
+            <VendaCampos venda={venda} onChange={setVenda} clienteId={cliente.id} />
           )}
 
           {resultado && !['fechado', 'sem_cnpj'].includes(resultado) && (

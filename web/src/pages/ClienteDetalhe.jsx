@@ -6,11 +6,15 @@ import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { dateKey, diaMes, hora, moeda, relativo } from '../lib/date.js';
 import { CORES_TEMPERATURA } from '../lib/score.js';
-import { Carregando, Progresso, Vazio } from '../components/ui.jsx';
+import { Avatar, Carregando, Progresso, Vazio } from '../components/ui.jsx';
 import AgendarRetorno from '../components/AgendarRetorno.jsx';
 import DiagnosticoModal from '../components/DiagnosticoModal.jsx';
 import RegistrarVisita from '../components/RegistrarVisita.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
+import TransferirCliente from '../components/TransferirCliente.jsx';
+import RegistrarVenda from '../components/RegistrarVenda.jsx';
+import AtivarMaquina from '../components/AtivarMaquina.jsx';
+import { NegocioLinha } from '../components/Negocio.jsx';
 import { ConcluirFollowup } from '../components/Followup.jsx';
 import { PrintConversa } from '../components/lead.jsx';
 import { linkWhatsApp } from '../lib/contato.js';
@@ -25,7 +29,8 @@ export default function ClienteDetalhe() {
 
   const { dados: cliente, carregando, erro, recarregar } = useRecurso(() => endpoints.cliente(id), [id]);
   const [modal, setModal] = useState(params.get('diagnostico') ? 'diagnostico' : null);
-  const [proposta, setProposta] = useState({ maquinas: 1, taxaOfertada: '' });
+  const [negocioModal, setNegocioModal] = useState(null); // { modo: 'venda' | 'proposta' | 'editar', negocio? }
+  const [ativar, setAtivar] = useState(null);
   const [excluir, setExcluir] = useState(null);
   const [print, setPrint] = useState(null);
   const [enviandoPrint, setEnviandoPrint] = useState(false);
@@ -51,17 +56,16 @@ export default function ClienteDetalhe() {
   const diagnosticoPreenchido = Boolean(cliente.diagnostico?.preenchidoAt);
   const somenteNumeros = (v = '') => v.replace(/\D/g, '');
 
+  // "Fechado" é venda: sem venda registrada, a etapa abre o formulário da venda
   const moverFunil = async (stage) => {
-    await endpoints.atualizarCliente(cliente.id, { stage });
-    toast(`Cliente movido para ${meta.funil[stage].label.toLowerCase()}.`);
-    recarregar();
-  };
-
-  const enviarProposta = async () => {
-    await endpoints.criarNegocio({ clientId: cliente.id, ...proposta });
-    toast('Proposta registrada. Cliente movido para "proposta".');
-    recarregarNotificacoes();
-    recarregar();
+    if (stage === 'fechado' && !cliente.pendencias?.temVenda) return setNegocioModal({ modo: 'venda' });
+    try {
+      await endpoints.atualizarCliente(cliente.id, { stage });
+      toast(`Cliente movido para ${meta.funil[stage].label.toLowerCase()}.`);
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
   };
 
   // Print com a resposta do lojista: é o que tira o remoto do "pendente"
@@ -95,10 +99,66 @@ export default function ClienteDetalhe() {
     }
   };
 
-  const avancarNegocio = async (negocio, status) => {
-    await endpoints.atualizarNegocio(negocio.id, { status });
-    toast(status === 'ativado' ? 'Máquina ativada! Entra na sua meta do mês.' : 'Negócio atualizado.');
-    recarregar();
+  // Gestão: reconhece (ou não) a ativação declarada pelo vendedor
+  const confirmarAtivacao = async (negocio) => {
+    try {
+      await endpoints.confirmarAtivacao(negocio.id);
+      toast('Ativação confirmada: entra na meta e no ranking.');
+      recarregarNotificacoes();
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
+  };
+
+  const recusarAtivacao = async (negocio) => {
+    const motivo = window.prompt('Por que a ativação não foi reconhecida?');
+    if (!motivo) return;
+    try {
+      await endpoints.recusarAtivacao(negocio.id, motivo);
+      toast('Ativação recusada: a máquina voltou para "vendida".');
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
+  };
+
+  // Cada etapa do negócio tem um próximo passo só
+  const acoesDoNegocio = (n) => {
+    if (['proposta', 'negociacao'].includes(n.status)) {
+      return (
+        <button className="btn btn-brand btn-sm" onClick={() => setNegocioModal({ modo: 'venda', negocio: n })}>
+          ★ Fechou
+        </button>
+      );
+    }
+    if (n.status === 'fechado') {
+      return (
+        <>
+          <button className="btn btn-brand btn-sm" onClick={() => setAtivar(n)}>Ativar</button>
+          <button className="btn btn-sm" onClick={() => setNegocioModal({ modo: 'editar', negocio: n })}>
+            {n.faltamSeries > 0 ? 'Informar série' : 'Editar'}
+          </button>
+        </>
+      );
+    }
+    if (n.aguardandoConfirmacao && ehGestor) {
+      return (
+        <>
+          <button className="btn btn-brand btn-sm" onClick={() => confirmarAtivacao(n)}>Confirmar</button>
+          <button className="btn btn-sm" onClick={() => recusarAtivacao(n)}>Recusar</button>
+        </>
+      );
+    }
+    if (n.aguardandoConfirmacao) return <span className="chip chip-alerta">aguardando gestão</span>;
+    if (n.status === 'ativado') {
+      return n.faltamSeries > 0 ? (
+        <button className="btn btn-sm" onClick={() => setNegocioModal({ modo: 'editar', negocio: n })}>Informar série</button>
+      ) : (
+        <span className="chip chip-ok">Ativada</span>
+      );
+    }
+    return null;
   };
 
   return (
@@ -196,6 +256,20 @@ export default function ClienteDetalhe() {
             </button>
           ))}
         </div>
+
+        {/* A gestão vê de quem é o cliente e pode passá-lo para outra carteira */}
+        {ehGestor && (
+          <div className="entre" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+            <span className="linha mini" style={{ gap: 8 }}>
+              <Avatar nome={cliente.owner?.name ?? '?'} cor={cliente.owner?.color} pequeno />
+              <span>
+                Responsável: <b>{cliente.owner?.name ?? 'sem carteira'}</b>
+                {cliente.owner?.city ? ` · ${cliente.owner.city}` : ''}
+              </span>
+            </span>
+            <button className="btn btn-sm" onClick={() => setModal('transferir')}>⇄ Transferir</button>
+          </div>
+        )}
 
         <div className="entre" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
           <span className="mini">
@@ -418,72 +492,54 @@ export default function ClienteDetalhe() {
         )}
       </div>
 
-      {/* -------------------------------------------- negócios e proposta */}
+      {/* -------------------------------------------- máquinas e propostas */}
       <div className="card">
         <div className="card-header">
-          <h2>Propostas e vendas</h2>
-          <span className="card-sub">{cliente.negocios.length} registro(s)</span>
-        </div>
-
-        {cliente.negocios.map((n) => (
-          <div key={n.id} className="cliente-linha">
-            <span className="avatar" style={{ background: n.status === 'ativado' ? '#0d9488' : n.status === 'fechado' ? '#16a34a' : '#8b5cf6' }}>
-              {n.maquinas}x
-            </span>
-            <div className="info">
-              <b>{n.maquinas} máquina(s){n.taxaOfertada ? ` · tabela ${n.taxaOfertada}` : ''}</b>
-              <div className="mini">
-                {n.taxaOfertada ? `Tabela ${n.taxaOfertada} · ` : ''}
-                proposta em {diaMes(n.propostaAt)}
-                {n.ativacaoAt ? ` · ativada em ${diaMes(n.ativacaoAt)}` : ''}
-              </div>
-            </div>
-            {n.status === 'ativado' ? (
-              <span className="chip chip-ok">Ativada</span>
-            ) : n.status === 'fechado' ? (
-              <button className="btn btn-brand btn-sm" onClick={() => avancarNegocio(n, 'ativado')}>Ativar</button>
-            ) : (
-              <button className="btn btn-sm" onClick={() => avancarNegocio(n, 'fechado')}>Fechar</button>
+          <div className="crescer">
+            <h2>Máquinas e propostas</h2>
+            <p className="mini">
+              {cliente.pendencias?.semAtivar > 0
+                ? `${cliente.pendencias.semAtivar} venda(s) sem ativar`
+                : cliente.pendencias?.aguardandoConfirmacao > 0
+                  ? 'ativação aguardando a gestão'
+                  : `${cliente.negocios.length} registro(s)`}
+              {cliente.pendencias?.faltamSeries > 0 ? ` · falta ${cliente.pendencias.faltamSeries} número(s) de série` : ''}
+            </p>
+          </div>
+          <div className="linha">
+            {!cliente.pendencias?.propostaAberta && (
+              <button className="btn btn-sm" onClick={() => setNegocioModal({ modo: 'proposta' })}>▭ Proposta</button>
             )}
-            <button
-              className="btn-remover"
-              title="Excluir este negócio"
-              onClick={() => setExcluir({ tipo: 'negocio', dado: n })}
-            >
-              ✕
-            </button>
+            <button className="btn btn-brand btn-sm" onClick={() => setNegocioModal({ modo: 'venda' })}>★ Venda</button>
           </div>
-        ))}
-
-        <div className="card-pad coluna" style={{ borderTop: cliente.negocios.length ? '1px solid var(--line)' : 'none' }}>
-          <b className="menor">Enviar nova proposta</b>
-          <div className="form-linha duas">
-            <div className="campo">
-              <label htmlFor="pr-maq">Máquinas</label>
-              <input
-                id="pr-maq" type="number" min="1" className="input" value={proposta.maquinas}
-                onChange={(e) => setProposta({ ...proposta, maquinas: Number(e.target.value) })}
-              />
-            </div>
-            <div className="campo">
-              <label htmlFor="pr-taxa">Tabela de taxa</label>
-              <select
-                id="pr-taxa"
-                className="select"
-                value={proposta.taxaOfertada}
-                onChange={(e) => setProposta({ ...proposta, taxaOfertada: e.target.value })}
-              >
-                <option value="">Escolha a tabela</option>
-                {(meta?.tabelasTaxa ?? []).map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button className="btn btn-primary btn-block" onClick={enviarProposta}>
-            ▭ Registrar proposta ({proposta.maquinas} máquina(s))
-          </button>
         </div>
+
+        {cliente.negocios.length === 0 ? (
+          <Vazio
+            emoji="◰"
+            titulo="Nenhuma proposta ou venda"
+            texto="Registre a proposta quando apresentar a tabela. Quando o cliente fechar, é ela que vira a venda."
+          />
+        ) : (
+          cliente.negocios.map((n) => (
+            <NegocioLinha
+              key={n.id}
+              negocio={n}
+              acoes={
+                <>
+                  {acoesDoNegocio(n)}
+                  <button
+                    className="btn-remover"
+                    title="Excluir este negócio"
+                    onClick={() => setExcluir({ tipo: 'negocio', dado: n })}
+                  >
+                    ✕
+                  </button>
+                </>
+              }
+            />
+          ))
+        )}
       </div>
 
       <div className="grid-auto-larga">
@@ -582,6 +638,19 @@ export default function ClienteDetalhe() {
       {modal === 'visita' && (
         <RegistrarVisita cliente={cliente} onFechar={() => setModal(null)} onRegistrado={recarregar} />
       )}
+      {modal === 'transferir' && (
+        <TransferirCliente cliente={cliente} onFechar={() => setModal(null)} onTransferido={recarregar} />
+      )}
+      {negocioModal && (
+        <RegistrarVenda
+          cliente={cliente}
+          negocio={negocioModal.negocio ?? null}
+          modo={negocioModal.modo}
+          onFechar={() => setNegocioModal(null)}
+          onSalvo={recarregar}
+        />
+      )}
+      {ativar && <AtivarMaquina negocio={ativar} onFechar={() => setAtivar(null)} onAtivado={recarregar} />}
       {concluir && (
         <ConcluirFollowup followup={concluir} onFechar={() => setConcluir(null)} onConcluido={recarregar} />
       )}

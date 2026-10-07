@@ -10,11 +10,11 @@ import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { Carregando, Vazio } from './ui.jsx';
 
-export default function SugestoesDoDia({ data, hoje, passado, onAgendar }) {
+export default function SugestoesDoDia({ data, hoje, passado, userId, onAgendar }) {
   const { toast } = useApp();
   const { dados, carregando, recarregar } = useRecurso(
-    () => (passado ? Promise.resolve(null) : endpoints.sugestoesDoDia(data)),
-    [data, passado]
+    () => (passado ? Promise.resolve(null) : endpoints.sugestoesDoDia(data, userId)),
+    [data, passado, userId]
   );
   const [agendando, setAgendando] = useState(null);
 

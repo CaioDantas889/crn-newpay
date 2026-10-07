@@ -88,7 +88,7 @@ export const endpoints = {
 
   // carteira
   clientes: (params) => api.get(`/clients${qs(params)}`),
-  sugestoesDoDia: (data) => api.get(`/clients/sugestoes${qs({ data })}`),
+  sugestoesDoDia: (data, userId) => api.get(`/clients/sugestoes${qs({ data, userId })}`),
   cliente: (id) => api.get(`/clients/${id}`),
   criarCliente: (dados) => api.post('/clients', dados),
   atualizarCliente: (id, patch) => api.patch(`/clients/${id}`, patch),
@@ -98,6 +98,7 @@ export const endpoints = {
   agendarRetorno: (id, dados) => api.post(`/clients/${id}/agendar-retorno`, dados),
   registrarContato: (id, dados) => api.post(`/clients/${id}/contato`, dados),
   excluirCliente: (id, forcar) => api.del(`/clients/${id}${forcar ? '?forcar=1' : ''}`),
+  transferirCliente: (id, ownerId) => api.post(`/clients/${id}/transferir`, { ownerId }),
 
   // lead com prova: duplicado, CNPJ na Receita, print e abertura do WhatsApp
   checarDuplicado: (params) => api.get(`/clients/checar${qs(params)}`),
@@ -120,6 +121,10 @@ export const endpoints = {
   criarNegocio: (dados) => api.post('/deals', dados),
   atualizarNegocio: (id, patch) => api.patch(`/deals/${id}`, patch),
   excluirNegocio: (id) => api.del(`/deals/${id}`),
+  // Máquinas vendidas sem ativar e ativações declaradas aguardando a gestão
+  pendenciasAtivacao: (userId) => api.get(`/deals/pendencias${qs({ userId })}`),
+  confirmarAtivacao: (id) => api.post(`/deals/${id}/confirmar-ativacao`),
+  recusarAtivacao: (id, motivo) => api.post(`/deals/${id}/recusar-ativacao`, { motivo }),
 
   // KPI diário
   kpi: (data) => api.get(`/kpi${qs({ data })}`),

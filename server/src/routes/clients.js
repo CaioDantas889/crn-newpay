@@ -27,6 +27,7 @@ import {
   reagendarFollowup, salvarPrint,
 } from '../followups.js';
 import { termoPendente } from '../auditoria.js';
+import { expandirNegocio, faltaNaVenda, temVenda } from '../vendas.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -43,10 +44,21 @@ const enriquecer = (c, agora = new Date()) => {
     leadStatusMeta: statusMeta(status),
     leadMotivo: motivoDoStatus(c, agora),
     origemLabel: ORIGENS_LEAD[c.origem]?.label ?? null,
+    // Quem cuida do cliente: a gestão vê a carteira da equipe inteira e
+    // precisa saber de quem é cada linha.
+    owner: userCard(c.ownerId),
   };
 };
 
 const podeVer = (cliente, user) => cliente.ownerId === user.id || isManager(user);
+
+/**
+ * Carteira pedida na consulta. O vendedor só enxerga a própria; a gestão
+ * enxerga a equipe inteira por padrão e filtra por vendedor quando quiser
+ * (`userId=<id>`), inclusive a própria (`userId=<id do gestor>`).
+ */
+const alvoDe = (req) => (isManager(req.user) ? req.query.userId || 'todos' : req.user.id);
+const daCarteira = (alvo) => (c) => alvo === 'todos' || c.ownerId === alvo;
 
 /** Data futura válida, ou null */
 function dataFutura(valor, agora = new Date()) {
@@ -58,12 +70,12 @@ function dataFutura(valor, agora = new Date()) {
 /** GET /api/clients?busca=&temperatura=&cidade=&stage=&segmento=&ordem= */
 router.get('/', (req, res) => {
   const { busca = '', temperatura, cidade, stage, segmento, ordem } = req.query;
-  const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
+  const alvo = alvoDe(req);
   const termo = String(busca).toLowerCase();
   const agora = new Date();
 
   let lista = table('clients')
-    .filter((c) => (alvo === 'todos' && isManager(req.user) ? true : c.ownerId === alvo))
+    .filter(daCarteira(alvo))
     .filter((c) => (temperatura ? c.temperature === temperatura : true))
     .filter((c) => (cidade ? c.city === cidade : true))
     .filter((c) => (stage ? c.stage === stage : true))
@@ -167,10 +179,10 @@ router.get('/mapa', (req, res) => {
       ? { lat: Number(req.query.lat), lng: Number(req.query.lng) }
       : req.user.base;
 
-  const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
+  const alvo = alvoDe(req);
 
   const pontos = table('clients')
-    .filter((c) => (alvo === 'todos' && isManager(req.user) ? true : c.ownerId === alvo))
+    .filter(daCarteira(alvo))
     .map((c) => ({
       ...enriquecer(c),
       distanciaKm: Number(haversine(origem, c).toFixed(1)),
@@ -198,10 +210,7 @@ router.get('/mapa', (req, res) => {
 
 /** Distribuição da carteira no funil */
 router.get('/funil', (req, res) => {
-  const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
-  const meus = table('clients').filter(
-    (c) => (alvo === 'todos' && isManager(req.user) ? true : c.ownerId === alvo)
-  );
+  const meus = table('clients').filter(daCarteira(alvoDe(req)));
 
   res.json(
     Object.entries(FUNIL).map(([chave, info]) => {
@@ -287,7 +296,18 @@ router.get('/:id', (req, res) => {
 
   const negocios = table('deals')
     .filter((d) => d.clientId === cliente.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((d) => expandirNegocio(d));
+
+  // O que a ficha precisa cobrar: série faltando, máquina sem ativar e
+  // ativação esperando a gestão
+  const pendencias = {
+    faltamSeries: negocios.reduce((s, d) => s + (d.faltamSeries || 0), 0),
+    semAtivar: negocios.filter((d) => d.status === 'fechado').length,
+    aguardandoConfirmacao: negocios.filter((d) => d.aguardandoConfirmacao).length,
+    propostaAberta: negocios.some((d) => ['proposta', 'negociacao'].includes(d.status)),
+    temVenda: negocios.some((d) => ['fechado', 'ativado'].includes(d.status)),
+  };
 
   const { detalhes } = calcularScore(cliente.diagnostico ?? {});
   const indicou = cliente.indicadoPor ? find('clients', cliente.indicadoPor) : null;
@@ -305,6 +325,7 @@ router.get('/:id', (req, res) => {
       .sort((a, b) => new Date(b.at) - new Date(a.at))
       .slice(0, 5),
     negocios,
+    pendencias,
     historico: agenda.filter((e) => new Date(e.start) < new Date()),
     proximos: agenda.filter((e) => new Date(e.start) >= new Date()).reverse(),
   });
@@ -416,6 +437,12 @@ router.post('/', async (req, res, next) => {
     if (!telefoneChave(whatsapp)) faltando.push('WhatsApp com DDD');
 
     /* -------------------------------------------- o que cada tipo exige */
+    // Lead que já fechou no cadastro: a venda precisa da tabela de taxa
+    if (b.resultado === 'fechado') {
+      const faltaVenda = faltaNaVenda(b.venda);
+      if (faltaVenda) return res.status(400).json({ error: faltaVenda });
+    }
+
     let consulta = null;
     const lat = Number(b.lat);
     const lng = Number(b.lng);
@@ -629,6 +656,26 @@ router.patch('/:id', (req, res) => {
   }
 
   if (patch.stage && !FUNIL[patch.stage]) return res.status(400).json({ error: 'Etapa inválida.' });
+
+  // "Fechado" não é só uma coluna: é venda. Ou ela vem junto (`venda`), ou o
+  // cliente já tem venda registrada — senão a etapa não anda e a tela pede os
+  // dados da venda.
+  if (patch.stage === 'fechado' && cliente.stage !== 'fechado') {
+    if (req.body.venda) {
+      const falta = faltaNaVenda(req.body.venda);
+      if (falta) return res.status(400).json({ error: falta });
+      delete patch.stage;
+      aplicarResultado(cliente, 'fechado', {
+        venda: req.body.venda, userId: req.user.id, notes: String(req.body.venda.notes ?? '').trim(),
+      });
+      logActivity({ userId: req.user.id, action: 'venda_registrada', clientId: cliente.id });
+    } else if (!temVenda(cliente.id)) {
+      return res.status(400).json({
+        error: 'Para fechar, registre a venda: máquinas, tabela de taxa e modelo.',
+        vendaNecessaria: true,
+      });
+    }
+  }
   if (patch.stage && patch.stage !== cliente.stage) patch.stageChangedAt = new Date().toISOString();
 
   if (!gestao && ['phone', 'whatsapp', 'cnpj'].some((c) => c in patch && patch[c] !== cliente[c])) {
@@ -799,6 +846,51 @@ router.post('/:id/print', async (req, res, next) => {
   } catch (erro) {
     next(erro);
   }
+});
+
+/**
+ * POST /api/clients/:id/transferir — body: { ownerId }
+ * Passa o cliente para outra carteira. Vai junto o que ainda está por fazer
+ * (follow-ups pendentes, visitas agendadas e tarefas abertas); o histórico
+ * fica como está e quem cadastrou o lead continua valendo para a meta dele.
+ */
+router.post('/:id/transferir', (req, res) => {
+  if (!isManager(req.user)) return res.status(403).json({ error: 'Só a gestão transfere cliente de carteira.' });
+
+  const cliente = find('clients', req.params.id);
+  if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+  const destino = find('users', req.body?.ownerId);
+  if (!destino) return res.status(400).json({ error: 'Escolha para quem vai o cliente.' });
+  if (destino.active === false) return res.status(400).json({ error: `${destino.name} está sem acesso ao CRM.` });
+  if (destino.role === 'onboarding') return res.status(400).json({ error: 'O onboarding não tem carteira.' });
+  if (destino.id === cliente.ownerId) {
+    return res.status(409).json({ error: `${cliente.company} já está com ${destino.name}.` });
+  }
+
+  const origem = cliente.ownerId;
+  const agora = new Date();
+
+  const followups = table('followups').filter((f) => f.clientId === cliente.id && f.status === 'pendente');
+  for (const f of followups) update('followups', f.id, { userId: destino.id });
+
+  const eventos = table('events').filter(
+    (e) => e.clientId === cliente.id && e.ownerId === origem && e.status === 'agendado' && new Date(e.start) >= agora
+  );
+  for (const e of eventos) update('events', e.id, { ownerId: destino.id });
+
+  const tarefas = table('tasks').filter((t) => t.clientId === cliente.id && t.ownerId === origem && !t.done);
+  for (const t of tarefas) update('tasks', t.id, { ownerId: destino.id });
+
+  const atualizado = update('clients', cliente.id, { ownerId: destino.id });
+  logActivity({
+    userId: req.user.id, action: 'cliente_transferido', clientId: cliente.id, de: origem, para: destino.id,
+  });
+
+  res.json({
+    ...enriquecer(atualizado, agora),
+    transferidos: { followups: followups.length, compromissos: eventos.length, tarefas: tarefas.length },
+  });
 });
 
 /** POST /api/clients/:id/recusar-print — a gestão viu o print e ele não prova nada */

@@ -10,6 +10,8 @@ import { distancia } from '../lib/mapa.js';
 import { Avatar, Carregando, Modal, Progresso, Stat, Vazio, iniciais } from '../components/ui.jsx';
 import MapaPonto from '../components/MapaPonto.jsx';
 import SemaforoEquipe from '../components/SemaforoEquipe.jsx';
+import AtivarMaquina from '../components/AtivarMaquina.jsx';
+import { NegocioLinha } from '../components/Negocio.jsx';
 
 const SITUACOES = {
   em_reuniao: '■︎ Em reunião',
@@ -52,6 +54,7 @@ export default function PainelGestor() {
         <button className={`aba${aba === 'semaforo' ? ' ativa' : ''}`} onClick={() => setAba('semaforo')}>Semáforo</button>
         <button className={`aba${aba === 'hoje' ? ' ativa' : ''}`} onClick={() => setAba('hoje')}>Execução do dia</button>
         <button className={`aba${aba === 'ponto' ? ' ativa' : ''}`} onClick={() => setAba('ponto')}>Ponto</button>
+        <button className={`aba${aba === 'ativacoes' ? ' ativa' : ''}`} onClick={() => setAba('ativacoes')}>Ativações</button>
         <button className={`aba${aba === 'resultado' ? ' ativa' : ''}`} onClick={() => setAba('resultado')}>Resultado do mês</button>
         <button className={`aba${aba === 'kpis' ? ' ativa' : ''}`} onClick={() => setAba('kpis')}>Registro diário</button>
       </div>
@@ -151,6 +154,19 @@ export default function PainelGestor() {
                 ) : (
                   <p className="mini" style={{ color: 'var(--red)' }}>Nenhum compromisso agendado neste dia.</p>
                 )}
+
+                {/* Daqui o gestor cai na lista de visitas, na carteira e na agenda do vendedor */}
+                <div className="detalhe-acoes">
+                  <button className="btn btn-sm" onClick={() => navigate(`/carteira?aba=visitas&userId=${item.vendedor.id}&data=${data}`)}>
+                    ✓ Visitas
+                  </button>
+                  <button className="btn btn-sm" onClick={() => navigate(`/carteira?userId=${item.vendedor.id}`)}>
+                    ◇ Carteira
+                  </button>
+                  <button className="btn btn-sm" onClick={() => navigate(`/dia/${data}?userId=${item.vendedor.id}`)}>
+                    ▤ Agenda
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -159,6 +175,9 @@ export default function PainelGestor() {
 
       {/* ==================================================== PONTO ===== */}
       {aba === 'ponto' && <PontoEquipe data={data} setData={setData} />}
+
+      {/* ================================================= ATIVAÇÕES ===== */}
+      {aba === 'ativacoes' && <AtivacoesEquipe />}
 
       {/* ============================================ RESULTADO DO MÊS === */}
       {aba === 'resultado' && (
@@ -621,5 +640,130 @@ function AjustarPonto({ vendedor, registro, data, onFechar, onSalvo }) {
         </span>
       </div>
     </Modal>
+  );
+}
+
+/* ============================================================ ATIVAÇÕES === */
+// O que está parado entre a venda e o resultado: ativações declaradas pelos
+// vendedores esperando a confirmação da gestão, e máquinas vendidas sem ativar.
+function AtivacoesEquipe() {
+  const { toast } = useApp();
+  const navigate = useNavigate();
+  const [vendedor, setVendedor] = useState('todos');
+  const [ativar, setAtivar] = useState(null);
+  const { dados: equipe } = useRecurso(() => endpoints.equipe(), []);
+  const { dados, carregando, recarregar } = useRecurso(() => endpoints.pendenciasAtivacao(vendedor), [vendedor]);
+
+  const confirmar = async (n) => {
+    try {
+      await endpoints.confirmarAtivacao(n.id);
+      toast(`Ativação de ${n.client?.company ?? 'cliente'} confirmada: entra na meta e no ranking.`);
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
+  };
+
+  const recusar = async (n) => {
+    const motivo = window.prompt(`Por que a ativação de ${n.client?.company ?? 'cliente'} não foi reconhecida?`);
+    if (!motivo) return;
+    try {
+      await endpoints.recusarAtivacao(n.id, motivo);
+      toast('Ativação recusada: a máquina voltou para "vendida" na ficha do vendedor.');
+      recarregar();
+    } catch (e) {
+      toast(e.message, 'erro');
+    }
+  };
+
+  if (carregando || !dados) return <Carregando linhas={5} />;
+  const t = dados.totais;
+
+  return (
+    <>
+      <div className="linha" style={{ flexWrap: 'wrap' }}>
+        <select className="select select-inline" value={vendedor} onChange={(e) => setVendedor(e.target.value)}>
+          <option value="todos">Equipe inteira</option>
+          {(equipe ?? []).filter((u) => u.role === 'vendedor').map((v) => (
+            <option key={v.id} value={v.id}>{v.name}</option>
+          ))}
+        </select>
+        <span className="mini">Prazo para ativar: {dados.prazoDias} dias depois da venda.</span>
+      </div>
+
+      <div className="ativacoes-topo">
+        <Stat
+          rotulo="Para confirmar" valor={t.declaradas} destaque
+          cor={t.declaradas > 0 ? 'var(--orange)' : 'var(--green)'}
+          extra={`${t.maquinasDeclaradas} máquina(s) declaradas`}
+        />
+        <Stat rotulo="Vendidas sem ativar" valor={t.semAtivar} cor="var(--blue)" extra={`${t.maquinasSemAtivar} máquina(s) paradas`} />
+        <Stat
+          rotulo="Atrasadas" valor={t.atrasadas}
+          cor={t.atrasadas > 0 ? 'var(--red)' : 'var(--green)'}
+          extra={`mais de ${dados.prazoDias} dias sem ativar`}
+        />
+        <Stat
+          rotulo="Sem número de série" valor={t.semSerie}
+          cor={t.semSerie > 0 ? 'var(--orange)' : 'var(--green)'}
+          extra="vendas sem a série informada"
+        />
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div className="crescer">
+            <h2>Ativações declaradas</h2>
+            <p className="mini">
+              O vendedor disse que ativou. Confira a série e confirme — só então conta na meta e no ranking.
+            </p>
+          </div>
+        </div>
+        {dados.declaradas.length === 0 ? (
+          <p className="card-pad mini">Nenhuma ativação esperando confirmação.</p>
+        ) : (
+          dados.declaradas.map((n) => (
+            <NegocioLinha
+              key={n.id}
+              negocio={n}
+              mostrarCliente
+              mostrarVendedor
+              onClick={() => navigate(`/carteira/${n.clientId}`)}
+              acoes={
+                <>
+                  <button className="btn btn-brand btn-sm" onClick={() => confirmar(n)}>✓ Confirmar</button>
+                  <button className="btn btn-sm" onClick={() => recusar(n)}>Recusar</button>
+                </>
+              }
+            />
+          ))
+        )}
+      </div>
+
+      <div className={`card${t.atrasadas > 0 ? ' card-atrasados' : ''}`}>
+        <div className="card-header">
+          <div className="crescer">
+            <h2>Vendidas sem ativar</h2>
+            <p className="mini">Mais velhas primeiro. Vermelho passou do prazo.</p>
+          </div>
+        </div>
+        {dados.semAtivar.length === 0 ? (
+          <p className="card-pad mini">Toda máquina vendida já foi ativada.</p>
+        ) : (
+          dados.semAtivar.map((n) => (
+            <NegocioLinha
+              key={n.id}
+              negocio={n}
+              mostrarCliente
+              mostrarVendedor
+              onClick={() => navigate(`/carteira/${n.clientId}`)}
+              acoes={<button className="btn btn-sm" onClick={() => setAtivar(n)}>Ativar</button>}
+            />
+          ))
+        )}
+      </div>
+
+      {ativar && <AtivarMaquina negocio={ativar} onFechar={() => setAtivar(null)} onAtivado={recarregar} />}
+    </>
   );
 }

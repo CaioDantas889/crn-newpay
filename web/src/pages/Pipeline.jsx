@@ -10,6 +10,7 @@ import { useTelaPequena } from '../lib/tela.js';
 import { Avatar, Carregando, Stat } from '../components/ui.jsx';
 import NovoCliente from '../components/NovoCliente.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
+import RegistrarVenda from '../components/RegistrarVenda.jsx';
 
 const DIAS_PARA_ALERTA = 7;
 
@@ -27,6 +28,7 @@ export default function Pipeline() {
   const [menuCard, setMenuCard] = useState(null);
   const [excluir, setExcluir] = useState(null);
   const [cardAberto, setCardAberto] = useState(null);
+  const [vendaPara, setVendaPara] = useState(null);
   // "perdido" começa fechado no celular: é a etapa que menos interessa no dia a dia
   const [recolhidas, setRecolhidas] = useState({ perdido: true });
   const telaPequena = useTelaPequena();
@@ -58,6 +60,10 @@ export default function Pipeline() {
     setArrastando(null);
     if (!cliente || cliente.stage === stage) return;
 
+    // "Fechado" é venda: sem máquina registrada, abre o formulário da venda em
+    // vez de só trocar a coluna
+    if (stage === 'fechado' && !(cliente.machines > 0)) return setVendaPara(cliente);
+
     const anterior = cliente.stage;
     setDados((lista) =>
       lista.map((c) => (c.id === clienteId ? { ...c, stage, stageMeta: meta.funil[stage] } : c))
@@ -65,15 +71,13 @@ export default function Pipeline() {
 
     try {
       await endpoints.atualizarCliente(clienteId, { stage });
-      toast(
-        stage === 'fechado'
-          ? `${cliente.company} fechado! Registre a venda na ficha para contar na meta.`
-          : `${cliente.company} → ${meta.funil[stage].label}.`
-      );
+      toast(`${cliente.company} → ${meta.funil[stage].label}.`);
     } catch (err) {
       setDados((lista) =>
         lista.map((c) => (c.id === clienteId ? { ...c, stage: anterior, stageMeta: meta.funil[anterior] } : c))
       );
+      // O servidor também exige a venda para fechar
+      if (stage === 'fechado') return setVendaPara(cliente);
       toast(err.message, 'erro');
     }
   };
@@ -372,6 +376,22 @@ export default function Pipeline() {
             toast(excluir.company + ' removido da carteira.');
             setDados((lista) => lista.filter((x) => x.id !== excluir.id));
           }}
+        />
+      )}
+
+      {vendaPara && (
+        <RegistrarVenda
+          cliente={vendaPara}
+          onFechar={() => setVendaPara(null)}
+          onSalvo={(negocio) =>
+            setDados((lista) =>
+              lista.map((c) =>
+                c.id === vendaPara.id
+                  ? { ...c, stage: 'fechado', stageMeta: meta.funil.fechado, machines: (c.machines || 0) + (negocio?.maquinas || 1) }
+                  : c
+              )
+            )
+          }
         />
       )}
 

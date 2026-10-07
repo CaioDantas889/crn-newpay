@@ -19,6 +19,7 @@ import {
 import { addDays, atHour, daysBetween, endOfDay, startOfDay } from './lib/dates.js';
 import { removerArquivo, salvarDataUrl } from './lib/uploads.js';
 import { soDigitos } from './leads.js';
+import { fecharVenda } from './vendas.js';
 
 const AVULSO = { etapa: 'avulso', dia: null, acao: 'ligacao', label: 'Retorno combinado', apoio: 'Data marcada com o lojista' };
 
@@ -173,23 +174,12 @@ export function aplicarResultado(cliente, resultado, { agora = new Date(), venda
   // "Não atendeu" é tentativa, não contato: não zera os dias sem contato
   if (resultado !== 'nao_atendeu') patch.lastContactAt = quando;
 
+  // Venda: a proposta aberta vira a venda (não nasce outra) e o contador de
+  // máquinas do cliente anda junto.
   let negocio = null;
   if (resultado === 'fechado') {
-    const maquinas = Math.max(1, Number(venda?.maquinas) || 1);
-    patch.machines = (cliente.machines || 0) + maquinas;
-    negocio = insert('deals', {
-      id: id('deal'),
-      clientId: cliente.id,
-      userId,
-      maquinas,
-      taxaOfertada: String(venda?.taxaOfertada ?? '').trim().slice(0, 40) || null,
-      status: 'fechado',
-      propostaAt: quando,
-      fechamentoAt: quando,
-      ativacaoAt: null,
-      notes,
-      createdAt: quando,
-    });
+    negocio = fecharVenda(cliente, venda ?? {}, { userId, agora, notes });
+    patch.machines = (cliente.machines || 0) + (negocio.maquinas || 1);
   }
 
   if (meta.encerraCadencia) patch.cadenciaEncerrada = resultado;

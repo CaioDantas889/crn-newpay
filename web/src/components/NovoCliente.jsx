@@ -1,22 +1,50 @@
 // Cadastro rápido em campo: só o essencial, com GPS do ponto de venda.
-// O diagnóstico é o passo seguinte.
+// O diagnóstico é o passo seguinte. A gestão escolhe em qual carteira o
+// cliente entra — sem isso ele ficava preso na carteira do gestor, onde
+// vendedor nenhum enxerga.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { mascaraDocumento, mascaraTelefone, validarDocumento, validarTelefone } from '../lib/mascaras.js';
 import { Modal } from './ui.jsx';
 
-export default function NovoCliente({ onFechar, onCriado }) {
-  const { meta, user, toast } = useApp();
+export default function NovoCliente({ onFechar, onCriado, ownerIdPadrao = '' }) {
+  const { meta, user, toast, ehGestor } = useApp();
   const [form, setForm] = useState({
     company: '', name: '', segment: 'mercadinho', phone: '', whatsapp: '',
-    cnpj: '', city: user.city, address: '',
+    cnpj: '', city: user.city, address: '', ownerId: ownerIdPadrao,
   });
+  const [equipe, setEquipe] = useState([]);
   const [local, setLocal] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
+  useEffect(() => {
+    if (!ehGestor) return;
+    endpoints
+      .equipe()
+      .then((lista) => {
+        const vendedores = lista.filter((u) => u.role === 'vendedor');
+        setEquipe(vendedores);
+        // Veio da carteira de um vendedor: a cidade já começa sendo a dele
+        const dono = vendedores.find((v) => v.id === ownerIdPadrao);
+        if (dono?.city) setForm((f) => (f.city === user.city ? { ...f, city: dono.city } : f));
+      })
+      .catch(() => setEquipe([]));
+  }, [ehGestor, ownerIdPadrao, user.city]);
+
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  // Escolher o vendedor já puxa a cidade dele, se a cidade ainda era a do gestor
+  const escolherVendedor = (e) => {
+    const ownerId = e.target.value;
+    const dono = equipe.find((v) => v.id === ownerId);
+    setForm((f) => ({
+      ...f,
+      ownerId,
+      city: dono?.city && (!f.city || f.city === user.city) ? dono.city : f.city,
+    }));
+  };
 
   // Campos com formato fixo: o texto já sai formatado enquanto digita
   const setMascarado = (campo, mascara) => (e) =>
@@ -43,8 +71,13 @@ export default function NovoCliente({ onFechar, onCriado }) {
     }
     setSalvando(true);
     try {
-      const cliente = await endpoints.criarCliente({ ...form, ...(local ?? {}) });
-      toast('Cliente cadastrado. Agora preencha o diagnóstico.');
+      const cliente = await endpoints.criarCliente({ ...form, ownerId: form.ownerId || undefined, ...(local ?? {}) });
+      const dono = equipe.find((v) => v.id === form.ownerId);
+      toast(
+        dono
+          ? `Cliente cadastrado na carteira de ${dono.name.split(' ')[0]}. Agora preencha o diagnóstico.`
+          : 'Cliente cadastrado. Agora preencha o diagnóstico.'
+      );
       onCriado?.(cliente);
       onFechar();
     } catch (err) {
@@ -68,6 +101,21 @@ export default function NovoCliente({ onFechar, onCriado }) {
         </>
       }
     >
+      {ehGestor && (
+        <div className="campo">
+          <label htmlFor="nc-dono">Vendedor responsável</label>
+          <select id="nc-dono" className="select" value={form.ownerId} onChange={escolherVendedor}>
+            <option value="">Minha carteira (gestão)</option>
+            {equipe.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}{v.city ? ` — ${v.city}` : ''}</option>
+            ))}
+          </select>
+          <span className="mini">
+            O cliente aparece na carteira, no mapa e nas sugestões de visita de quem você escolher.
+          </span>
+        </div>
+      )}
+
       <div className="campo">
         <label htmlFor="nc-empresa">Estabelecimento</label>
         <input

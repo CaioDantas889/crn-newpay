@@ -12,6 +12,11 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 4000
+    },
+    {
+      "name": "newpay-demo-4010",
+      "url": "http://localhost:4010",
+      "port": 4010
     }
   ]
 }

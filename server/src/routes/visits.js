@@ -16,6 +16,7 @@ import { addDays, atHour, dateKey, endOfDay, startOfDay } from '../lib/dates.js'
 import {
   aplicarResultado, concluirFollowup, expandirFollowup, gerarProximo, pendenteDoCliente, salvarPrint,
 } from '../followups.js';
+import { expandirNegocio, faltaNaVenda } from '../vendas.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -25,11 +26,17 @@ const expandir = (v) => ({
   client: clientCard(v.clientId),
   user: userCard(v.userId),
   resultadoMeta: resultadoVisita(v.resultado),
+  // Visita antiga não tem a marcação: sem coordenada é sem GPS
+  semGps: v.semGps === true || !Number.isFinite(v.lat) || !Number.isFinite(v.lng),
 });
 
-/** GET /api/visits?clientId=&data=&userId= */
+/**
+ * GET /api/visits?clientId=&data=&de=&ate=&resultado=&tipo=&userId=&limite=
+ * O vendedor vê as próprias visitas. A gestão vê as da equipe inteira por
+ * padrão e filtra por vendedor com `userId`.
+ */
 router.get('/', (req, res) => {
-  const alvo = req.query.userId && isManager(req.user) ? req.query.userId : req.user.id;
+  const alvo = isManager(req.user) ? req.query.userId || 'todos' : req.user.id;
   let lista = table('visits').filter((v) => (alvo === 'todos' ? true : v.userId === alvo));
 
   if (req.query.clientId) lista = lista.filter((v) => v.clientId === req.query.clientId);
@@ -37,11 +44,22 @@ router.get('/', (req, res) => {
     const base = new Date(`${req.query.data}T12:00:00`);
     lista = lista.filter((v) => new Date(v.at) >= startOfDay(base) && new Date(v.at) <= endOfDay(base));
   }
+  // Período fechado (YYYY-MM-DD), para a lista de visitas da carteira
+  if (req.query.de) {
+    const ini = startOfDay(new Date(`${req.query.de}T12:00:00`));
+    if (!Number.isNaN(ini.getTime())) lista = lista.filter((v) => new Date(v.at) >= ini);
+  }
+  if (req.query.ate) {
+    const fim = endOfDay(new Date(`${req.query.ate}T12:00:00`));
+    if (!Number.isNaN(fim.getTime())) lista = lista.filter((v) => new Date(v.at) <= fim);
+  }
+  if (req.query.resultado) lista = lista.filter((v) => v.resultado === req.query.resultado);
+  if (req.query.tipo) lista = lista.filter((v) => (v.tipo ?? 'revisita') === req.query.tipo);
 
   res.json(
     lista
       .sort((a, b) => new Date(b.at) - new Date(a.at))
-      .slice(0, Number(req.query.limite) || 100)
+      .slice(0, Math.min(Number(req.query.limite) || 100, 500))
       .map(expandir)
   );
 });
@@ -65,6 +83,12 @@ router.post('/', (req, res) => {
   // App aberto numa versão anterior ainda manda os nomes antigos
   const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
   if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
+
+  // Venda sem tabela de taxa é venda sem preço: não entra
+  if (resultado === 'fechado') {
+    const falta = faltaNaVenda(b.venda);
+    if (falta) return res.status(400).json({ error: falta });
+  }
 
   const agora = new Date();
 
@@ -110,7 +134,7 @@ router.post('/', (req, res) => {
   // Fecha o compromisso da agenda, quando a visita veio de um agendamento
   if (b.eventId) {
     const evento = find('events', b.eventId);
-    if (evento && evento.ownerId === req.user.id) {
+    if (evento && (evento.ownerId === req.user.id || isManager(req.user))) {
       update('events', evento.id, { status: 'realizado', checkinAt: agora.toISOString(), outcome: resultado });
     }
   }
@@ -148,7 +172,7 @@ router.post('/', (req, res) => {
     visita: expandir(visita),
     // `retorno.start` mantém o formato que a tela de visita já lia
     retorno: proximo ? { ...expandirFollowup(proximo, { agora }), type: 'followup', start: proximo.dueAt } : null,
-    negocio,
+    negocio: negocio ? expandirNegocio(negocio) : null,
     cliente: find('clients', cliente.id),
     avisos,
   });

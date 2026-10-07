@@ -7,6 +7,7 @@ import { requireAuth } from '../auth.js';
 import { atividadesDoDia, faixaDoMes, funilDoVendedor, kpiCalculado, rankingDoMes, resumoVendedor } from '../metrics.js';
 import { expandEvent } from '../serializers.js';
 import { dateKey, endOfDay, startOfDay } from '../lib/dates.js';
+import { pendenciasDeAtivacao } from '../vendas.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -65,6 +66,8 @@ router.get('/', (req, res) => {
     },
     proximosCompromissos: proximos,
     clientesQuentes,
+    // Máquinas vendidas sem ativar e ativações aguardando a gestão
+    ativacoes: pendenciasDeAtivacao(userId, agora),
   });
 });
 

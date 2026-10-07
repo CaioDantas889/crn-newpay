@@ -119,6 +119,10 @@ app.get('/api/meta', (req, res) =>
     segmentos: dominio.SEGMENTOS,
     tabelasTaxa: dominio.TABELAS_TAXA,
     maquinas: dominio.MAQUINAS,
+    // Venda e ativação da maquininha
+    modelosMaquina: dominio.MODELOS_MAQUINA,
+    ativacao: dominio.ATIVACAO,
+    statusNegocio: dominio.STATUS_NEGOCIO,
     faturamentos: dominio.FATURAMENTOS,
     volumesCartao: dominio.VOLUMES_CARTAO,
     dores: dominio.DORES,

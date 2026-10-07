@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { addDays, dateKey, diaExtenso, hora, isToday, parseKey } from '../lib/date.js';
@@ -11,14 +11,34 @@ import EventoModal from '../components/EventoModal.jsx';
 export default function AgendaDia() {
   const { data } = useParams();
   const navigate = useNavigate();
-  const { toast, recarregarNotificacoes } = useApp();
+  const [params, setParams] = useSearchParams();
+  const { toast, recarregarNotificacoes, ehGestor } = useApp();
 
   const chave = data ?? dateKey();
   const dia = parseKey(chave);
   const [modal, setModal] = useState(null);
   const [novaTarefa, setNovaTarefa] = useState('');
 
-  const { dados, carregando, recarregar } = useRecurso(() => endpoints.eventosDoDia(chave), [chave]);
+  // Gestão: agenda de um vendedor (userId na URL) ou a própria (vazio)
+  const vendedor = ehGestor ? params.get('userId') ?? '' : '';
+  const userId = vendedor || undefined;
+  const { dados: equipe } = useRecurso(
+    () => (ehGestor ? endpoints.equipe() : Promise.resolve([])),
+    [ehGestor]
+  );
+  const vendedores = (equipe ?? []).filter((u) => u.role === 'vendedor');
+  const escolhido = vendedores.find((v) => v.id === vendedor);
+
+  // Trocar de dia mantém a agenda de quem está sendo vista
+  const irPara = (novaChave) => navigate({ pathname: `/dia/${novaChave}`, search: vendedor ? `?userId=${vendedor}` : '' });
+  const trocarVendedor = (id) => {
+    const p = new URLSearchParams(params);
+    if (id) p.set('userId', id);
+    else p.delete('userId');
+    setParams(p, { replace: true });
+  };
+
+  const { dados, carregando, recarregar } = useRecurso(() => endpoints.eventosDoDia(chave, userId), [chave, userId]);
   const eventos = dados?.eventos ?? [];
   const tarefas = dados?.tarefas ?? [];
   const followups = dados?.followups ?? [];
@@ -64,6 +84,7 @@ export default function AgendaDia() {
       end: new Date(inicio.getTime() + 60 * 60000).toISOString(),
       clientId: cliente.id,
       location: [cliente.address, cliente.city].filter(Boolean).join(' — '),
+      ownerId: userId,
     });
     toast(`${cliente.company} na agenda às ${hora(inicio)}.`);
     recarregar();
@@ -76,6 +97,7 @@ export default function AgendaDia() {
       title: novaTarefa,
       kind: 'tarefa',
       dueAt: new Date(`${chave}T18:00:00`).toISOString(),
+      ownerId: userId,
     });
     setNovaTarefa('');
     toast('Tarefa adicionada.');
@@ -85,19 +107,35 @@ export default function AgendaDia() {
   return (
     <div className="page">
       <div className="dia-navegacao">
-        <button className="btn btn-icone" onClick={() => navigate(`/dia/${dateKey(addDays(dia, -1))}`)} aria-label="Dia anterior">‹</button>
+        <button className="btn btn-icone" onClick={() => irPara(dateKey(addDays(dia, -1)))} aria-label="Dia anterior">‹</button>
         <div className="crescer">
           <h2 className="dia-titulo">{diaExtenso(dia)}</h2>
-          <p className="mini">{isToday(dia) ? 'Hoje' : dateKey(dia) === dateKey(addDays(new Date(), 1)) ? 'Amanhã' : 'Agenda do dia'}</p>
+          <p className="mini">
+            {isToday(dia) ? 'Hoje' : dateKey(dia) === dateKey(addDays(new Date(), 1)) ? 'Amanhã' : 'Agenda do dia'}
+            {escolhido ? ` · agenda de ${escolhido.name}` : ''}
+          </p>
         </div>
-        <button className="btn btn-icone" onClick={() => navigate(`/dia/${dateKey(addDays(dia, 1))}`)} aria-label="Próximo dia">›</button>
+        <button className="btn btn-icone" onClick={() => irPara(dateKey(addDays(dia, 1)))} aria-label="Próximo dia">›</button>
         <input
           type="date"
           className="input"
           style={{ width: 'auto' }}
           value={chave}
-          onChange={(e) => navigate(`/dia/${e.target.value}`)}
+          onChange={(e) => e.target.value && irPara(e.target.value)}
         />
+        {ehGestor && (
+          <select
+            className="select select-inline"
+            value={vendedor}
+            onChange={(e) => trocarVendedor(e.target.value)}
+            aria-label="De quem é a agenda"
+          >
+            <option value="">Minha agenda</option>
+            {vendedores.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        )}
         <button className="btn btn-primary" onClick={() => setModal({})}>+ Compromisso</button>
       </div>
 
@@ -179,6 +217,7 @@ export default function AgendaDia() {
             data={chave}
             hoje={isToday(dia)}
             passado={chave < dateKey()}
+            userId={userId}
             onAgendar={agendarVisita}
           />
 
@@ -250,6 +289,7 @@ export default function AgendaDia() {
         <EventoModal
           evento={modal.id ? modal : null}
           dataPadrao={chave}
+          ownerId={userId}
           onFechar={() => setModal(null)}
           onSalvo={recarregar}
         />

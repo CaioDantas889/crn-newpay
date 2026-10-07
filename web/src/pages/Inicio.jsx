@@ -4,12 +4,17 @@
 //   3. placar da meta de leads novos
 // Abaixo disso continuam a meta do mês, o funil e os leads mais perto de comprar.
 
+import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { duracao, hora, relativo } from '../lib/date.js';
 import { Carregando, Falha, Progresso, Vazio } from '../components/ui.jsx';
 import { FollowupCard } from '../components/Followup.jsx';
+import AtivarMaquina from '../components/AtivarMaquina.jsx';
+import { NegocioLinha } from '../components/Negocio.jsx';
+
+const SEM_PENDENCIAS = { prazoDias: 7, semAtivar: [], declaradas: [], totais: {} };
 
 const ATIVIDADES = [
   { chave: 'visitasAgendadas', label: 'Visitas agendadas', emoji: '▤', rota: '/dia' },
@@ -22,7 +27,8 @@ export default function Inicio() {
   const { user, placar: placarDoTopo } = useApp();
   const navigate = useNavigate();
   const { abrirRegistroVisita, abrirNovoLead } = useOutletContext();
-  const { dados, carregando, erro } = useRecurso(() => endpoints.dashboard(), []);
+  const { dados, carregando, erro, recarregar: recarregarPainel } = useRecurso(() => endpoints.dashboard(), []);
+  const [ativar, setAtivar] = useState(null);
 
   // Lead novo ou follow-up concluído em qualquer tela muda o placar do topo:
   // a lista daqui acompanha.
@@ -41,6 +47,7 @@ export default function Inicio() {
   if (carregando || !dados || !dia) return <div className="page"><Carregando linhas={6} /></div>;
 
   const { resumo, ranking, atividades, funil, kpiHoje, clientesQuentes, proximosCompromissos } = dados;
+  const pendentes = dados.ativacoes ?? SEM_PENDENCIAS;
   const { placar, followups, contagens, semContar, sequencia } = dia;
   const faltam = Math.max(0, resumo.meta.metaMaquinas - resumo.maquinasAtivadas);
   const hoje = new Date();
@@ -180,6 +187,44 @@ export default function Inicio() {
         </div>
       )}
 
+      {/* --------------------------------- 4. máquinas vendidas sem ativar */}
+      {(pendentes.semAtivar.length > 0 || pendentes.declaradas.length > 0) && (
+        <div className={`card${pendentes.totais.atrasadas > 0 ? ' card-atrasados' : ''}`}>
+          <div className="card-header">
+            <div className="crescer">
+              <h2>Máquinas para ativar</h2>
+              <p className="mini">
+                Venda só vira resultado quando a máquina ativa. Parada há mais de {pendentes.prazoDias} dias fica vermelha.
+              </p>
+            </div>
+            <span className={`chip ${pendentes.totais.atrasadas > 0 ? 'chip-erro' : 'chip-alerta'}`}>
+              {pendentes.totais.maquinasSemAtivar ?? 0} sem ativar
+              {pendentes.totais.atrasadas > 0 ? ` · ${pendentes.totais.atrasadas} atrasada(s)` : ''}
+            </span>
+          </div>
+          {pendentes.semAtivar.map((n) => (
+            <NegocioLinha
+              key={n.id}
+              negocio={n}
+              mostrarCliente
+              onClick={() => navigate(`/carteira/${n.clientId}`)}
+              acoes={<button className="btn btn-brand btn-sm" onClick={() => setAtivar(n)}>Ativar</button>}
+            />
+          ))}
+          {pendentes.declaradas.length > 0 && (
+            <>
+              <div className="card-header" style={{ borderTop: '1px solid var(--line)' }}>
+                <h3>Aguardando confirmação da gestão</h3>
+                <span className="card-sub">{pendentes.totais.maquinasDeclaradas} máquina(s)</span>
+              </div>
+              {pendentes.declaradas.map((n) => (
+                <NegocioLinha key={n.id} negocio={n} mostrarCliente onClick={() => navigate(`/carteira/${n.clientId}`)} />
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
       {!kpiHoje.fechado && hoje.getHours() >= 16 && (
         <button className="card card-pad linha alerta-kpi" onClick={() => navigate('/fechar-dia')}>
           <span style={{ fontSize: '1.4rem' }}>▤</span>
@@ -228,6 +273,11 @@ export default function Inicio() {
               {ranking.lider ? ` · líder: ${ranking.lider.name.split(' ')[0]} (${ranking.lider.maquinas})` : ''}
             </span>
           </div>
+          {resumo.maquinasDeclaradas > 0 && (
+            <p className="mini situacao-alerta">
+              +{resumo.maquinasDeclaradas} máquina(s) ativada(s) aguardando confirmação da gestão.
+            </p>
+          )}
         </div>
       </div>
 
@@ -338,6 +388,8 @@ export default function Inicio() {
           )}
         </div>
       </div>
+
+      {ativar && <AtivarMaquina negocio={ativar} onFechar={() => setAtivar(null)} onAtivado={recarregarPainel} />}
     </div>
   );
 }

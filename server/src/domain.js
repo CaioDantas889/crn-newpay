@@ -61,6 +61,38 @@ export const TABELAS_TAXA = [
   '079',
 ];
 
+/* --------------------------------------------- venda e ativação ---- */
+// O que o CRM guarda da maquininha que o cliente comprou: modelo e número de
+// série (um por máquina). A lista de modelos é a da NewPay — ajuste aqui e ela
+// chega à interface pelo /api/meta.
+
+export const MODELOS_MAQUINA = {
+  smart: 'Smart',
+  pro:   'Pro',
+  mini:  'Mini',
+  link:  'Link de pagamento',
+};
+
+export const ATIVACAO = {
+  // Venda sem ativação acima disso fica vermelha na tela "Hoje" e no painel
+  prazoDias: 7,
+  // Ativação declarada pelo vendedor só entra na meta e no ranking depois que
+  // a gestão confirma. false = conta na hora.
+  exigeConfirmacao: true,
+};
+
+export const STATUS_NEGOCIO = {
+  proposta:   { label: 'Proposta',   cor: '#8b5cf6' },
+  negociacao: { label: 'Negociação', cor: '#f59e0b' },
+  fechado:    { label: 'Vendida',    cor: '#16a34a' },
+  ativado:    { label: 'Ativada',    cor: '#0d9488' },
+  perdido:    { label: 'Perdida',    cor: '#dc2626' },
+};
+
+/** A ativação deste negócio já conta na meta e no ranking? */
+export const ativacaoConta = (negocio) =>
+  negocio?.status === 'ativado' && (!ATIVACAO.exigeConfirmacao || Boolean(negocio.ativacaoConfirmadaAt));
+
 /* --------------------------------------------- diagnóstico comercial */
 
 export const MAQUINAS = {

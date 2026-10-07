@@ -11,7 +11,9 @@ import { cnpjValido, mascaraDocumento, mascaraTelefone, somenteNumeros, validarT
 import { isoDoInput } from '../lib/contato.js';
 import { Modal } from './ui.jsx';
 import CameraFoto from './CameraFoto.jsx';
-import { LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VendaCampos, useLocalAgora } from './lead.jsx';
+import {
+  LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, faltaNaVenda, useLocalAgora,
+} from './lead.jsx';
 
 const VAZIO = {
   company: '', name: '', whatsapp: '', segment: '', maquinaAtual: '', faturamentoCartao: '',
@@ -25,7 +27,7 @@ export default function NovoLead({ onFechar, onCriado }) {
   const [foto, setFoto] = useState(null);
   const [print, setPrint] = useState(null);
   const [resultado, setResultado] = useState(null);
-  const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: '' });
+  const [venda, setVenda] = useState(VENDA_VAZIA);
   const [proximoEm, setProximoEm] = useState('');
   const [duplicado, setDuplicado] = useState(null);
   const [receita, setReceita] = useState(null); // { carregando } | { erro } | consulta
@@ -93,6 +95,7 @@ export default function NovoLead({ onFechar, onCriado }) {
     if (!form.faturamentoCartao) faltando.push('faturamento no cartão');
     if (!foto) faltando.push('foto da fachada');
     if (!resultado) faltando.push('resultado da visita');
+    if (resultado === 'fechado' && faltaNaVenda(venda)) faltando.push('tabela de taxa da venda');
     if (!gps.local) faltando.push('localização');
   } else {
     if (!cnpjValido(form.cnpj)) faltando.push('CNPJ');
@@ -119,7 +122,9 @@ export default function NovoLead({ onFechar, onCriado }) {
             lng: gps.local.lng,
             precisao: gps.local.precisao,
             proximoEm: isoDoInput(proximoEm),
-            venda: resultado === 'fechado' ? venda : undefined,
+            venda: resultado === 'fechado'
+              ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
+              : undefined,
           }
         : {
             ...comum,

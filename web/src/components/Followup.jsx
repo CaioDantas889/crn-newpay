@@ -10,7 +10,8 @@ import { diaMes, hora } from '../lib/date.js';
 import { isoDoInput, linkTelefone, linkWhatsApp } from '../lib/contato.js';
 import { Modal } from './ui.jsx';
 import {
-  LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VendaCampos, agoraParaInput, useLocalAgora,
+  LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, agoraParaInput, faltaNaVenda,
+  useLocalAgora,
 } from './lead.jsx';
 
 const SELO = { d1: 'D+1', d3: 'D+3', d7: 'D+7', d15: 'D+15', d30: 'D+30', avulso: 'Retorno' };
@@ -126,13 +127,15 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
   const [resultado, setResultado] = useState(null);
   const [notes, setNotes] = useState('');
   const [print, setPrint] = useState(null);
-  const [venda, setVenda] = useState({ maquinas: 1, taxaOfertada: '' });
+  const [venda, setVenda] = useState(VENDA_VAZIA);
   const [proximoEm, setProximoEm] = useState('');
   const [salvando, setSalvando] = useState(false);
   const gps = useLocalAgora(f.exigeGps);
 
   const falta = !resultado
     ? 'Escolha o resultado do contato.'
+    : resultado === 'fechado' && faltaNaVenda(venda)
+      ? faltaNaVenda(venda)
     : f.exigePrint && !print
       ? 'Lead remoto: anexe o print da conversa.'
       : f.exigeGps && !gps.local
@@ -151,7 +154,9 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
         lng: gps.local?.lng,
         precisao: gps.local?.precisao,
         proximoEm: isoDoInput(proximoEm),
-        venda: resultado === 'fechado' ? venda : undefined,
+        venda: resultado === 'fechado'
+          ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
+          : undefined,
       });
       toast(
         r.negocio
@@ -186,7 +191,9 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       }
     >
       <ResultadoChips valor={resultado} onChange={setResultado} rotulo="O que aconteceu no contato?" />
-      {resultado === 'fechado' && <VendaCampos venda={venda} onChange={setVenda} />}
+      {resultado === 'fechado' && (
+        <VendaCampos venda={venda} onChange={setVenda} clienteId={f.clientId ?? f.client?.id} />
+      )}
 
       {f.exigePrint && <PrintConversa print={print} onChange={setPrint} obrigatorio />}
       {f.exigeGps && <LocalAgora gps={gps} obrigatorio />}

@@ -3,7 +3,7 @@
 
 import { table } from './store.js';
 import {
-  FUNIL, RESULTADOS_PERDIDOS, RESULTADOS_PRODUTIVOS, nivelPorAtivacoes, proximoNivel,
+  FUNIL, RESULTADOS_PERDIDOS, RESULTADOS_PRODUTIVOS, ativacaoConta, nivelPorAtivacoes, proximoNivel,
 } from './domain.js';
 import { dateKey, endOfDay, startOfDay } from './lib/dates.js';
 
@@ -40,10 +40,15 @@ export function resumoVendedor(userId, de, ate, mes) {
 
   const propostas = negocios.filter((d) => dentro(d.propostaAt, de, ate));
   const vendas = negocios.filter((d) => dentro(d.fechamentoAt, de, ate));
-  const ativacoes = negocios.filter((d) => d.status === 'ativado' && dentro(d.ativacaoAt, de, ate));
+  // Só a ativação confirmada pela gestão conta; a declarada aparece à parte
+  const ativacoes = negocios.filter((d) => ativacaoConta(d) && dentro(d.ativacaoAt, de, ate));
+  const declaradas = negocios.filter((d) => d.status === 'ativado' && !ativacaoConta(d) && dentro(d.ativacaoAt, de, ate));
+  const semAtivar = negocios.filter((d) => d.status === 'fechado');
 
   const maquinasVendidas = vendas.reduce((s, d) => s + d.maquinas, 0);
   const maquinasAtivadas = ativacoes.reduce((s, d) => s + d.maquinas, 0);
+  const maquinasDeclaradas = declaradas.reduce((s, d) => s + d.maquinas, 0);
+  const maquinasSemAtivar = semAtivar.reduce((s, d) => s + d.maquinas, 0);
 
   const novosLeads = table('clients').filter(
     (c) => c.ownerId === userId && dentro(c.createdAt, de, ate)
@@ -68,6 +73,8 @@ export function resumoVendedor(userId, de, ate, mes) {
     vendas: vendas.length,
     maquinasVendidas,
     maquinasAtivadas,
+    maquinasDeclaradas,
+    maquinasSemAtivar,
     meta,
     metaBatida,
     percentualMeta: meta.metaMaquinas ? Math.round((maquinasAtivadas / meta.metaMaquinas) * 100) : 0,

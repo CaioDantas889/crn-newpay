@@ -7,6 +7,7 @@ import { useApp, useRecurso } from '../state/app.jsx';
 import { addDays, dateKey, duracao } from '../lib/date.js';
 import { distancia } from '../lib/mapa.js';
 import { Carregando, Stat, Vazio } from '../components/ui.jsx';
+import FecharDiaForm from '../components/FecharDiaForm.jsx';
 
 const DIAS_NO_HISTORICO = 14;
 
@@ -46,9 +47,14 @@ function posicaoAtual() {
 
 export default function Expediente() {
   const { toast } = useApp();
-  const { dados, carregando, recarregar } = useRecurso(() => endpoints.jornada({ dias: DIAS_NO_HISTORICO }), []);
+  const { dados, recarregar } = useRecurso(() => endpoints.jornada({ dias: DIAS_NO_HISTORICO }), []);
   const [batendo, setBatendo] = useState(false);
   const [agora, setAgora] = useState(Date.now());
+  // Cada batida recarrega os números do fechamento; cada saída abre o atalho.
+  // `diaFechado` vem do próprio cartão, para o toast não contradizer a tela.
+  const [versaoKpi, setVersaoKpi] = useState(0);
+  const [saidas, setSaidas] = useState(0);
+  const [diaFechado, setDiaFechado] = useState(false);
 
   // Relógio do tempo em campo, enquanto o expediente está aberto
   useEffect(() => {
@@ -72,9 +78,11 @@ export default function Expediente() {
         toast(
           tipo === 'entrada'
             ? `Expediente iniciado às ${hora(jornada.inicioAt)}.`
-            : `Expediente encerrado. ${duracao(jornada.duracaoMin)} em campo hoje.`
+            : `Expediente encerrado. ${duracao(jornada.duracaoMin)} em campo hoje.${diaFechado ? '' : ' Agora é fechar o dia.'}`
         );
         recarregar();
+        setVersaoKpi((v) => v + 1);
+        if (tipo === 'saida') setSaidas((s) => s + 1);
       } catch (e) {
         toast(e.message, 'erro');
         recarregar();
@@ -82,10 +90,12 @@ export default function Expediente() {
         setBatendo(false);
       }
     },
-    [recarregar, toast]
+    [recarregar, toast, diaFechado]
   );
 
-  if (carregando || !dados) return <div className="page"><Carregando linhas={4} /></div>;
+  // Só a primeira carga mostra o esqueleto: recarregar depois de uma batida
+  // mantém a tela (e o atalho do fechamento, com o que estiver digitado nele)
+  if (!dados) return <div className="page"><Carregando linhas={4} /></div>;
 
   const aberta = dados.aberta;
   const minutosAgora = aberta
@@ -137,6 +147,18 @@ export default function Expediente() {
 
         {aberta && <Local rotulo="Entrada registrada" local={aberta.inicioLocal} endereco={aberta.inicioEndereco} />}
       </div>
+
+      {/* Atalho do fechamento: encerrou o expediente, fecha o dia aqui mesmo.
+          Abre sozinho (e fica em destaque) só com o ponto de hoje encerrado;
+          com o ponto aberto é uma linha neutra, porque o dia ainda está
+          andando. Reabrir o ponto recolhe o formulário. */}
+      <FecharDiaForm
+        modo="atalho"
+        abrir={!aberta && dados.hoje ? 1 + saidas : 0}
+        destacar={!aberta && Boolean(dados.hoje)}
+        versao={versaoKpi}
+        onEstado={setDiaFechado}
+      />
 
       <div className="grid grid-4">
         <Stat

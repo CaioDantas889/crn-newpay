@@ -244,7 +244,9 @@ secao('Registro de visita');
 
 // depois de várias execuções a carteira pode estar toda fechada; então cai no primeiro
 // Cliente da carteira antiga (sem prova): lead novo tem regras próprias, testadas mais abaixo
-const alvo = clientes.json.find((c) => !c.origem && !['fechado', 'perdido'].includes(c.stage)) ?? clientes.json[0];
+// Cliente sem venda registrada: as verificações de fechamento partem do zero
+const alvo =
+  clientes.json.find((c) => !c.origem && !['fechado', 'perdido'].includes(c.stage) && !(c.machines > 0)) ?? clientes.json[0];
 
 const emTresDias = new Date(Date.now() + 3 * 86400000).toISOString();
 const visitaRetorno = await api('/api/visits', {
@@ -281,15 +283,102 @@ ok(visitasDoCliente.json?.length >= 2, 'histórico de visitas do cliente', `${vi
 /* ----------------------------------------------------- propostas e vendas */
 secao('Propostas, vendas e ativações');
 
+ok(meta.json?.modelosMaquina?.smart && meta.json?.ativacao?.prazoDias > 0, 'vocabulário traz modelos de máquina e prazo de ativação', `${Object.keys(meta.json?.modelosMaquina ?? {}).join(' · ')} · ${meta.json?.ativacao?.prazoDias} dias`);
+
+// Venda sem tabela de taxa não entra — nem pela visita, nem direto
+const semTabela = await api('/api/visits', {
+  token: vendedor, method: 'POST', body: { clientId: alvo.id, resultado: 'fechado', venda: { maquinas: 1 } },
+});
+ok(semTabela.status === 400, 'visita "Fechou" sem tabela de taxa é recusada', semTabela.json?.error);
+ok(
+  (await api('/api/deals', { token: vendedor, method: 'POST', body: { clientId: alvo.id, status: 'fechado', maquinas: 1 } })).status === 400,
+  'venda direta sem tabela de taxa é recusada'
+);
+
+// Mover para "Fechado" no funil sem venda registrada não anda
+const soEtapa = await api(`/api/clients/${alvo.id}`, { token: vendedor, method: 'PATCH', body: { stage: 'fechado' } });
+ok(soEtapa.status === 400 && soEtapa.json?.vendaNecessaria === true, 'funil não vai para "fechado" sem venda registrada', soEtapa.json?.error);
+
 const proposta = await api('/api/deals', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, maquinas: 1, taxaOfertada: 'geral d0' },
+  body: { clientId: alvo.id, maquinas: 2, taxaOfertada: 'geral d0', modelo: 'smart' },
 });
-ok(proposta.status === 201 && proposta.json?.status === 'proposta', 'enviar proposta');
+ok(proposta.status === 201 && proposta.json?.status === 'proposta', 'enviar proposta', `${proposta.json?.modeloLabel} · ${proposta.json?.maquinas} máquinas`);
+const negociosAntes = (await api(`/api/deals?clientId=${alvo.id}`, { token: vendedor })).json.length;
 
-const ativado = await api(`/api/deals/${proposta.json.id}`, { token: vendedor, method: 'PATCH', body: { status: 'ativado' } });
-ok(ativado.json?.status === 'ativado' && ativado.json?.ativacaoAt, 'ativar a máquina');
+// A visita "Fechou" converte a proposta aberta — não nasce um segundo negócio
+const fechouProposta = await api('/api/visits', {
+  token: vendedor, method: 'POST',
+  body: { clientId: alvo.id, resultado: 'fechado', venda: { maquinas: 2, taxaOfertada: 'geral d0', series: ['np 0001'] } },
+});
+ok(fechouProposta.json?.negocio?.id === proposta.json.id, 'visita "Fechou" converte a proposta aberta em venda');
+ok(
+  fechouProposta.json?.negocio?.status === 'fechado' && fechouProposta.json?.negocio?.propostaAt === proposta.json.propostaAt,
+  'a venda guarda a data da proposta (conversão proposta → venda)'
+);
+ok(
+  (await api(`/api/deals?clientId=${alvo.id}`, { token: vendedor })).json.length === negociosAntes,
+  'não nasce um segundo negócio ao fechar'
+);
+ok(
+  fechouProposta.json?.negocio?.series?.[0] === 'NP0001' && fechouProposta.json?.negocio?.faltamSeries === 1,
+  'número de série por máquina: 1 informada (limpa), 1 faltando'
+);
+ok(fechouProposta.json?.cliente?.stage === 'fechado', 'cliente vai para "fechado" ao converter a proposta');
+
+// Pendências: vendida sem ativar aparece para o vendedor
+const pend = await api('/api/deals/pendencias', { token: vendedor });
+ok(pend.json?.semAtivar?.some((d) => d.id === proposta.json.id), 'venda sem ativar aparece nas pendências', `${pend.json?.totais?.semAtivar} sem ativar · ${pend.json?.totais?.semSerie} sem série`);
+
+// Ativação com data: futura não vale, antes da venda não vale
+ok(
+  (await api(`/api/deals/${proposta.json.id}`, { token: vendedor, method: 'PATCH', body: { status: 'ativado', data: '2999-01-01' } })).status === 400,
+  'ativação com data futura é recusada'
+);
+ok(
+  (await api(`/api/deals/${proposta.json.id}`, { token: vendedor, method: 'PATCH', body: { status: 'ativado', data: '2020-01-01' } })).status === 400,
+  'ativação antes da venda é recusada'
+);
+
+const ativado = await api(`/api/deals/${proposta.json.id}`, {
+  token: vendedor, method: 'PATCH', body: { status: 'ativado', data: hoje, series: ['NP0002'] },
+});
+ok(ativado.json?.status === 'ativado' && ativado.json?.ativacaoAt, 'vendedor declara a ativação', ativado.json?.ativacaoAt?.slice(0, 10));
+ok(ativado.json?.aguardandoConfirmacao === true && ativado.json?.ativacaoConfirmada === false, 'ativação do vendedor fica aguardando a gestão');
+ok(ativado.json?.faltamSeries === 0 && ativado.json?.series?.length === 2, 'série que faltava entra na ativação');
 ok(ativado.json?.tpvRealizado === undefined, 'negocio ativado nao carrega TPV');
+
+const dashDeclarada = await api('/api/dashboard', { token: vendedor });
+ok(dashDeclarada.json?.resumo?.maquinasDeclaradas >= 2, 'declarada aparece à parte no dashboard', `${dashDeclarada.json?.resumo?.maquinasDeclaradas} declarada(s)`);
+ok(dashDeclarada.json?.ativacoes?.declaradas?.some((d) => d.id === proposta.json.id), 'tela Hoje lista a ativação aguardando a gestão');
+const ativadasAntes = dashDeclarada.json?.resumo?.maquinasAtivadas ?? 0;
+
+// Gestão confirma: só então conta
+ok(
+  (await api(`/api/deals/${proposta.json.id}/confirmar-ativacao`, { token: vendedor, method: 'POST' })).status === 403,
+  'vendedor não confirma a própria ativação'
+);
+const pendGestor = await api('/api/deals/pendencias?userId=todos', { token: gestor });
+ok(pendGestor.json?.declaradas?.some((d) => d.id === proposta.json.id), 'ativação declarada aparece para o gestor confirmar', `${pendGestor.json?.totais?.declaradas} na fila`);
+const confirmada = await api(`/api/deals/${proposta.json.id}/confirmar-ativacao`, { token: gestor, method: 'POST' });
+ok(confirmada.json?.ativacaoConfirmada === true, 'gestor confirma a ativação');
+ok(
+  ((await api('/api/dashboard', { token: vendedor })).json?.resumo?.maquinasAtivadas ?? 0) === ativadasAntes + 2,
+  'ativação confirmada soma na meta do mês',
+  `${ativadasAntes} → ${ativadasAntes + 2}`
+);
+
+// Recusa devolve a máquina para "vendida"; gestor ativando já confirma
+ok(
+  (await api(`/api/deals/${proposta.json.id}/recusar-ativacao`, { token: gestor, method: 'POST', body: {} })).status === 400,
+  'recusar ativação exige motivo'
+);
+const recusada = await api(`/api/deals/${proposta.json.id}/recusar-ativacao`, {
+  token: gestor, method: 'POST', body: { motivo: 'terminal não consta na adquirente' },
+});
+ok(recusada.json?.status === 'fechado' && recusada.json?.ativacaoRecusada?.motivo, 'gestor recusa a ativação e a máquina volta para vendida');
+const reativada = await api(`/api/deals/${proposta.json.id}`, { token: gestor, method: 'PATCH', body: { status: 'ativado' } });
+ok(reativada.json?.ativacaoConfirmada === true, 'ativação feita pelo gestor já nasce confirmada');
 
 // O MediaRecorder do Chrome manda "audio/webm;codecs=opus": ja descartou audio
 // de visita em silencio uma vez, entao fica travado aqui.
@@ -649,7 +738,7 @@ ok((await api(`/api/deals/${dealTemp.json.id}`, { token: vendedor, method: 'DELE
 
 // Cliente com maquina ativada carrega o resultado do mes: o vendedor nao apaga
 const dealAtivo = await api('/api/deals', {
-  token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 2, status: 'ativado' },
+  token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 2, status: 'ativado', taxaOfertada: '2mm' },
 });
 const recusa = await api(`/api/clients/${alvo.id}`, { token: vendedor, method: 'DELETE' });
 ok(recusa.status === 409, 'cliente com máquina ativada é protegido', recusa.json?.error?.slice(0, 72));
@@ -664,7 +753,7 @@ const descartavel = await api('/api/clients', {
   token: gestor, method: 'POST', body: { company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
 });
 await api('/api/deals', {
-  token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado' },
+  token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado', taxaOfertada: '2mm' },
 });
 ok(
   (await api(`/api/clients/${descartavel.json.id}?forcar=1`, { token: vendedor, method: 'DELETE' })).status === 409,
@@ -1014,6 +1103,91 @@ const tentativa = await api('/api/clients', {
 });
 ok(tentativa.status === 403, 'vendedor nao joga cliente na carteira alheia', tentativa.json?.error);
 await api(`/api/clients/${importado.json.id}?forcar=1`, { token: gestor, method: 'DELETE' });
+
+/* ------------------------------------- carteira e visitas vistas pela gestao */
+secao('Carteira e visitas vistas pela gestao');
+
+const carteiraEquipe = await api('/api/clients', { token: gestor });
+const donos = new Set((carteiraEquipe.json ?? []).map((c) => c.ownerId));
+ok(donos.size > 1, 'gestor sem filtro ve a carteira da equipe inteira', `${carteiraEquipe.json?.length} clientes de ${donos.size} carteiras`);
+ok(carteiraEquipe.json.every((c) => c.owner?.name), 'cada cliente diz quem e o responsavel');
+ok(
+  (await api(`/api/clients?userId=${login.json.user.id}`, { token: gestor })).json.every((c) => c.ownerId === login.json.user.id),
+  'gestor filtra a carteira de um vendedor'
+);
+ok(
+  (await api('/api/clients?userId=todos', { token: vendedor })).json.every((c) => c.ownerId === login.json.user.id),
+  'vendedor nao enxerga carteira alheia nem pedindo "todos"'
+);
+ok(
+  new Set((await api('/api/clients/mapa?raio=50', { token: gestor })).json.pontos.map((p) => p.ownerId)).size > 1,
+  'mapa da gestao mistura as carteiras'
+);
+
+const visitasEquipe = await api('/api/visits?limite=500', { token: gestor });
+ok(new Set(visitasEquipe.json.map((v) => v.userId)).size > 1, 'gestor sem filtro ve as visitas da equipe inteira', `${visitasEquipe.json.length} visitas`);
+ok(visitasEquipe.json.every((v) => v.user?.name && typeof v.semGps === 'boolean'), 'cada visita traz o vendedor e a marcacao de GPS');
+ok(
+  (await api('/api/visits?userId=todos&limite=500', { token: vendedor })).json.every((v) => v.userId === login.json.user.id),
+  'vendedor nao enxerga visita alheia nem pedindo "todos"'
+);
+const seteDiasAtras = new Date(Date.now() - 6 * 86400000);
+const daSemana = await api(`/api/visits?de=${seteDiasAtras.toISOString().slice(0, 10)}&ate=${hoje}&limite=500`, { token: gestor });
+ok(
+  daSemana.json.length <= visitasEquipe.json.length &&
+    daSemana.json.every((v) => new Date(v.at) >= new Date(seteDiasAtras.getTime() - 86400000)),
+  'filtro por periodo das visitas',
+  `${daSemana.json.length} na semana`
+);
+ok(
+  (await api('/api/visits?resultado=fechado&limite=500', { token: gestor })).json.every((v) => v.resultado === 'fechado'),
+  'filtro por resultado das visitas'
+);
+
+// Transferencia de carteira: o que a gestao cadastrou para si vai para o vendedor
+const paraTransferir = await api('/api/clients', {
+  token: gestor, method: 'POST',
+  body: { company: `Cliente Para Transferir ${Date.now()}`, city: 'Iguatu' },
+});
+ok(paraTransferir.json?.ownerId === gestorLogin.json.user.id, 'sem vendedor escolhido, o cliente fica na carteira do gestor');
+ok((await api(`/api/clients/${paraTransferir.json.id}`, { token: vendedor })).status === 403, 'antes da transferencia o vendedor nao abre o cliente');
+ok(
+  (await api(`/api/clients/${paraTransferir.json.id}/transferir`, { token: vendedor, method: 'POST', body: { ownerId: login.json.user.id } })).status === 403,
+  'vendedor nao transfere cliente'
+);
+await api(`/api/clients/${paraTransferir.json.id}/agendar-retorno`, { token: gestor, method: 'POST', body: { date: emTresDias } });
+const transf = await api(`/api/clients/${paraTransferir.json.id}/transferir`, {
+  token: gestor, method: 'POST', body: { ownerId: login.json.user.id },
+});
+ok(transf.status === 200 && transf.json?.ownerId === login.json.user.id, 'gestor transfere o cliente para o vendedor', JSON.stringify(transf.json?.transferidos));
+ok(transf.json?.transferidos?.followups === 1, 'o follow-up pendente vai junto');
+const fichaTransferida = await api(`/api/clients/${paraTransferir.json.id}`, { token: vendedor });
+ok(fichaTransferida.json?.ownerId === login.json.user.id, 'o cliente passa a abrir na carteira do vendedor');
+ok(
+  fichaTransferida.json?.followups?.some((f) => f.status === 'pendente' && f.userId === login.json.user.id),
+  'o follow-up ficou com quem recebeu o cliente'
+);
+ok(
+  (await api(`/api/clients/${paraTransferir.json.id}/transferir`, { token: gestor, method: 'POST', body: { ownerId: login.json.user.id } })).status === 409,
+  'transferir para quem ja tem o cliente devolve 409'
+);
+ok(
+  (await api(`/api/clients/${paraTransferir.json.id}/transferir`, { token: gestor, method: 'POST', body: { ownerId: 'usr_nao_existe' } })).status === 400,
+  'destino inexistente e recusado'
+);
+await api(`/api/clients/${paraTransferir.json.id}?forcar=1`, { token: gestor, method: 'DELETE' });
+
+// Tarefa deixada pela gestao na agenda do vendedor
+const tarefaDele = await api('/api/tasks', {
+  token: gestor, method: 'POST',
+  body: { title: 'Ligar para o lojista', ownerId: login.json.user.id, dueAt: new Date().toISOString() },
+});
+ok(tarefaDele.status === 201 && tarefaDele.json?.ownerId === login.json.user.id, 'gestor deixa tarefa na agenda do vendedor');
+ok(
+  (await api('/api/tasks', { token: vendedor, method: 'POST', body: { title: 'x', ownerId: gestorLogin.json.user.id } })).status === 403,
+  'vendedor nao cria tarefa para outra pessoa'
+);
+await api(`/api/tasks/${tarefaDele.json.id}`, { token: gestor, method: 'DELETE' });
 
 console.log(`\n${falhas === 0 ? '✔ Tudo certo.' : `✖ ${falhas} verificação(ões) falharam.`}\n`);
 process.exit(falhas === 0 ? 0 : 1);

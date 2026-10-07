@@ -166,3 +166,31 @@ button.cliente-linha {
   padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2);
 }
 .termo-editor { min-height: 300px; font-size: 0.82rem; line-height: 1.5; }
+
+/* ------------------------------------------------- venda e ativação */
+.venda-campos { background: var(--ok-bg); border-color: var(--ok-line); }
+.serie-linha { display: flex; gap: 6px; }
+.serie-linha + .serie-linha { margin-top: 6px; }
+.serie-linha .input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.series { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; align-items: center; }
+.serie {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.7rem; letter-spacing: 0.04em;
+  padding: 2px 6px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
+}
+.leitor { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.leitor-video {
+  width: 100%; max-height: 240px; object-fit: cover; border-radius: var(--radius-sm);
+  background: #000; border: 1px solid var(--line);
+}
+.negocio .info > b { font-size: 0.86rem; }
+.negocio.fechado.atrasada { box-shadow: inset 3px 0 0 var(--red); }
+.negocio.clicavel { cursor: pointer; }
+.negocio-acoes { display: flex; flex-direction: column; gap: 4px; align-items: stretch; flex: none; }
+.negocio-acoes .btn { white-space: nowrap; }
+.situacao-erro { color: var(--erro-fg); font-weight: 650; }
+.situacao-alerta { color: var(--alerta-fg); font-weight: 600; }
+.situacao-ok { color: var(--ok-fg); }
+.ativacoes-topo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 760px) { .ativacoes-topo { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
