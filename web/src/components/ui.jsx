@@ -1,27 +1,38 @@
 // Peças reaproveitadas em várias telas.
 
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
-export function Modal({ titulo, subtitulo, onFechar, children, rodape }) {
+/**
+ * `sujo`: o formulário tem algo preenchido. Aí um toque fora, o Esc ou o ✕
+ * perguntam antes de fechar — no celular, um toque sem querer acima do
+ * formulário apagava o lead inteiro, foto da fachada incluída. O botão
+ * "Cancelar" do rodapé continua fechando direto: ali a intenção é clara.
+ */
+export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = false }) {
+  const tentarFechar = useCallback(() => {
+    if (sujo && !window.confirm('Descartar o que você preencheu?')) return;
+    onFechar();
+  }, [sujo, onFechar]);
+
   useEffect(() => {
-    const fechaComEsc = (e) => e.key === 'Escape' && onFechar();
+    const fechaComEsc = (e) => e.key === 'Escape' && tentarFechar();
     window.addEventListener('keydown', fechaComEsc);
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', fechaComEsc);
       document.body.style.overflow = '';
     };
-  }, [onFechar]);
+  }, [tentarFechar]);
 
   return (
-    <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && onFechar()}>
+    <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && tentarFechar()}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="modal-header">
           <div className="crescer">
             <h2>{titulo}</h2>
             {subtitulo && <p className="mini">{subtitulo}</p>}
           </div>
-          <button className="btn btn-ghost btn-icone" onClick={onFechar} aria-label="Fechar">✕</button>
+          <button className="btn btn-ghost btn-icone" onClick={tentarFechar} aria-label="Fechar">✕</button>
         </div>
         <div className="modal-corpo">{children}</div>
         {rodape && <div className="modal-rodape">{rodape}</div>}

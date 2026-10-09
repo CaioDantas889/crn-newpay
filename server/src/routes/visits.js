@@ -16,7 +16,7 @@ import { addDays, atHour, dateKey, endOfDay, startOfDay } from '../lib/dates.js'
 import {
   aplicarResultado, concluirFollowup, expandirFollowup, gerarProximo, pendenteDoCliente, salvarPrint,
 } from '../followups.js';
-import { expandirNegocio, faltaNaVenda } from '../vendas.js';
+import { expandirNegocio, faltaNaVenda, negocioAberto } from '../vendas.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -84,9 +84,9 @@ router.post('/', (req, res) => {
   const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
   if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
 
-  // Venda sem tabela de taxa é venda sem preço: não entra
+  // Venda sem tabela ou sem modelo não entra; o que a proposta aberta já tem vale
   if (resultado === 'fechado') {
-    const falta = faltaNaVenda(b.venda);
+    const falta = faltaNaVenda(b.venda, negocioAberto(cliente.id));
     if (falta) return res.status(400).json({ error: falta });
   }
 

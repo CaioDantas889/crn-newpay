@@ -154,9 +154,7 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
         lng: gps.local?.lng,
         precisao: gps.local?.precisao,
         proximoEm: isoDoInput(proximoEm),
-        venda: resultado === 'fechado'
-          ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
-          : undefined,
+        venda: resultado === 'fechado' ? venda : undefined,
       });
       toast(
         r.negocio
@@ -181,6 +179,7 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       titulo={`${SELO[f.etapa] ?? 'Follow-up'} · ${f.passo.label}`}
       subtitulo={`${f.client.company} — ${f.client.name}`}
       onFechar={onFechar}
+      sujo={Boolean(resultado || notes.trim() || print)}
       rodape={
         <>
           <button className="btn" onClick={onFechar}>Cancelar</button>

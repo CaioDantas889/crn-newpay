@@ -157,6 +157,9 @@ export default function PainelGestor() {
 
                 {/* Daqui o gestor cai na lista de visitas, na carteira e na agenda do vendedor */}
                 <div className="detalhe-acoes">
+                  <button className="btn btn-primary btn-sm" onClick={() => navigate(`/equipe/${item.vendedor.id}`)}>
+                    ◉ Perfil
+                  </button>
                   <button className="btn btn-sm" onClick={() => navigate(`/carteira?aba=visitas&userId=${item.vendedor.id}&data=${data}`)}>
                     ✓ Visitas
                   </button>
@@ -702,11 +705,6 @@ function AtivacoesEquipe() {
           rotulo="Atrasadas" valor={t.atrasadas}
           cor={t.atrasadas > 0 ? 'var(--red)' : 'var(--green)'}
           extra={`mais de ${dados.prazoDias} dias sem ativar`}
-        />
-        <Stat
-          rotulo="Sem número de série" valor={t.semSerie}
-          cor={t.semSerie > 0 ? 'var(--orange)' : 'var(--green)'}
-          extra="vendas sem a série informada"
         />
       </div>
 

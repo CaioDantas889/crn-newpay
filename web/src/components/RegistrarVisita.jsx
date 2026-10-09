@@ -229,9 +229,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
         lng: local?.lng,
         precisao: local?.precisao,
         proximoEm: isoDoInput(proximoEm),
-        venda: resultado === 'fechado'
-          ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
-          : undefined,
+        venda: resultado === 'fechado' ? venda : undefined,
       });
 
       const dataRetorno = resposta.retorno
@@ -267,6 +265,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       titulo="Registrar visita"
       subtitulo={cliente ? `${cliente.company} — ${cliente.city}` : 'Revisita a quem já está na base — loja nova entra em “+ Lead”'}
       onFechar={onFechar}
+      sujo={Boolean(resultado || notes.trim() || fotos.length || audio || gravando)}
       rodape={
         <>
           <button className="btn" onClick={onFechar}>Cancelar</button>

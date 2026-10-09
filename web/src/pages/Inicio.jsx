@@ -4,7 +4,7 @@
 //   3. placar da meta de leads novos
 // Abaixo disso continuam a meta do mês, o funil e os leads mais perto de comprar.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
@@ -31,11 +31,25 @@ export default function Inicio() {
   const [ativar, setAtivar] = useState(null);
 
   // Lead novo ou follow-up concluído em qualquer tela muda o placar do topo:
-  // a lista daqui acompanha.
-  const { dados: dia, erro: erroDoDia, recarregar } = useRecurso(
-    () => endpoints.hoje(),
-    [placarDoTopo?.total, placarDoTopo?.pendentes, placarDoTopo?.atrasados]
-  );
+  // a lista daqui acompanha. A primeira chegada do placar não conta como
+  // mudança — senão a tela buscava tudo duas vezes ao abrir (4G e bateria).
+  const chavePlacar = placarDoTopo
+    ? `${placarDoTopo.total}|${placarDoTopo.pendentes}|${placarDoTopo.atrasados}`
+    : null;
+  const ultimaChave = useRef(chavePlacar);
+  const [versaoDia, setVersaoDia] = useState(0);
+  useEffect(() => {
+    if (chavePlacar === null) return;
+    if (ultimaChave.current === null) {
+      ultimaChave.current = chavePlacar;
+      return;
+    }
+    if (ultimaChave.current !== chavePlacar) {
+      ultimaChave.current = chavePlacar;
+      setVersaoDia((v) => v + 1);
+    }
+  }, [chavePlacar]);
+  const { dados: dia, erro: erroDoDia, recarregar } = useRecurso(() => endpoints.hoje(), [versaoDia]);
 
   // Sem isto, uma falha (servidor fora do ar, ou ainda na versão anterior logo
   // depois de uma atualização) deixaria a tela carregando para sempre.

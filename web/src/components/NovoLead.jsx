@@ -5,6 +5,7 @@
 // declaração e o print da conversa com a resposta do lojista.
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { cnpjValido, mascaraDocumento, mascaraTelefone, somenteNumeros, validarTelefone } from '../lib/mascaras.js';
@@ -12,7 +13,7 @@ import { isoDoInput } from '../lib/contato.js';
 import { Modal } from './ui.jsx';
 import CameraFoto from './CameraFoto.jsx';
 import {
-  LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, faltaNaVenda, useLocalAgora,
+  LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, useLocalAgora,
 } from './lead.jsx';
 
 const VAZIO = {
@@ -38,6 +39,12 @@ export default function NovoLead({ onFechar, onCriado }) {
   const presencial = origem === 'presencial';
   const gps = useLocalAgora(presencial);
   const consultado = useRef('');
+  const navigate = useNavigate();
+  // Uma chave por cadastro: se o 4G cair depois de o servidor gravar e o
+  // vendedor tocar em Salvar de novo, volta o mesmo lead em vez de "duplicado"
+  const chave = useRef(
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
 
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
 
@@ -47,7 +54,7 @@ export default function NovoLead({ onFechar, onCriado }) {
     const t = setTimeout(() => {
       endpoints
         .checarDuplicado({ whatsapp: form.whatsapp })
-        .then((r) => setDuplicado(r.duplicado ? r.mensagem : null))
+        .then((r) => setDuplicado(r.duplicado ? { mensagem: r.mensagem, clientId: r.clientId, seu: r.seu } : null))
         .catch(() => {});
     }, 350);
     return () => clearTimeout(t);
@@ -95,7 +102,8 @@ export default function NovoLead({ onFechar, onCriado }) {
     if (!form.faturamentoCartao) faltando.push('faturamento no cartão');
     if (!foto) faltando.push('foto da fachada');
     if (!resultado) faltando.push('resultado da visita');
-    if (resultado === 'fechado' && faltaNaVenda(venda)) faltando.push('tabela de taxa da venda');
+    if (resultado === 'fechado' && !venda.modelo) faltando.push('maquininha vendida');
+    if (resultado === 'fechado' && !venda.taxaOfertada) faltando.push('tabela de taxa da venda');
     if (!gps.local) faltando.push('localização');
   } else {
     if (!cnpjValido(form.cnpj)) faltando.push('CNPJ');
@@ -109,7 +117,7 @@ export default function NovoLead({ onFechar, onCriado }) {
     if (faltando.length) return toast(`Falta: ${faltando.join(', ')}.`, 'erro');
     setSalvando(true);
     try {
-      const comum = { origem, name: form.name, company: form.company, whatsapp: form.whatsapp };
+      const comum = { origem, chave: chave.current, name: form.name, company: form.company, whatsapp: form.whatsapp };
       const corpo = presencial
         ? {
             ...comum,
@@ -122,9 +130,7 @@ export default function NovoLead({ onFechar, onCriado }) {
             lng: gps.local.lng,
             precisao: gps.local.precisao,
             proximoEm: isoDoInput(proximoEm),
-            venda: resultado === 'fechado'
-              ? { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()) }
-              : undefined,
+            venda: resultado === 'fechado' ? venda : undefined,
           }
         : {
             ...comum,
@@ -140,9 +146,11 @@ export default function NovoLead({ onFechar, onCriado }) {
       const lead = await endpoints.criarCliente(corpo);
       const p = lead.placar;
       toast(
-        lead.leadStatus === 'pendente'
-          ? `Lead salvo como pendente: ${lead.leadMotivo}`
-          : `Lead salvo. Hoje: ${p.total}/${p.meta} (${p.presenciais} presenciais · ${p.remotos} remotos).`
+        lead.repetido
+          ? `Este lead já tinha sido salvo antes de a conexão cair. Hoje: ${p.total}/${p.meta}.`
+          : lead.leadStatus === 'pendente'
+            ? `Lead salvo como pendente: ${lead.leadMotivo}`
+            : `Lead salvo. Hoje: ${p.total}/${p.meta} (${p.presenciais} presenciais · ${p.remotos} remotos).`
       );
       for (const aviso of lead.avisos ?? []) toast(aviso, 'erro');
 
@@ -165,6 +173,7 @@ export default function NovoLead({ onFechar, onCriado }) {
       titulo="Novo lead"
       subtitulo={presencial ? 'Visita na loja — GPS, horário e foto' : 'Indicação ou WhatsApp — CNPJ e print'}
       onFechar={onFechar}
+      sujo={Boolean(foto || print || resultado || Object.entries(form).some(([k, v]) => v && v !== VAZIO[k]))}
       rodape={
         <>
           <button className="btn" onClick={onFechar}>Cancelar</button>
@@ -235,7 +244,21 @@ export default function NovoLead({ onFechar, onCriado }) {
             placeholder="(88) 99999-0000"
           />
           {validarTelefone(form.whatsapp) && <span className="mini erro-campo">{validarTelefone(form.whatsapp)}</span>}
-          {duplicado && <span className="mini erro-campo">{duplicado}</span>}
+          {duplicado && <span className="mini erro-campo">{duplicado.mensagem}</span>}
+          {/* Lojista que já está na carteira dele: o certo é a revisita, a um toque */}
+          {duplicado?.clientId && (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => {
+                onFechar();
+                navigate(`/carteira/${duplicado.clientId}${duplicado.seu ? '?visita=1' : ''}`);
+              }}
+            >
+              {duplicado.seu ? '✓ Registrar visita na ficha dele' : 'Abrir a ficha'}
+            </button>
+          )}
         </div>
       </div>
 

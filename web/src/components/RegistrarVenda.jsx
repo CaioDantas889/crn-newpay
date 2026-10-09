@@ -1,10 +1,10 @@
 // Venda e proposta fora da visita: quando o cliente é movido para "Fechado"
-// no funil, quando a proposta aberta fecha pela ficha, e para completar
-// modelo e número de série de uma venda já registrada.
+// no funil, quando a proposta aberta fecha pela ficha, e para corrigir
+// quantidade, tabela ou modelo de uma venda já registrada.
 //
 // modo: 'venda'    → cliente fechou (converte a proposta aberta, se houver)
 //       'proposta' → enviar proposta
-//       'editar'   → máquinas, tabela, modelo e séries de um negócio existente
+//       'editar'   → máquinas, tabela e modelo de um negócio existente
 
 import { useState } from 'react';
 import { endpoints } from '../api/client.js';
@@ -22,10 +22,13 @@ const deNegocio = (n) => ({
   maquinas: n.maquinas || 1,
   taxaOfertada: n.taxaOfertada ?? '',
   modelo: n.modelo ?? '',
-  series: n.series ?? [],
 });
 
-export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda', onFechar, onSalvo }) {
+/**
+ * `aviso`: por que o formulário abriu (ex.: o cartão foi levado para "Fechado"
+ * no Pipeline) — aparece no topo para o vendedor entender o que está sendo pedido.
+ */
+export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda', aviso, onFechar, onSalvo }) {
   const { toast, recarregarNotificacoes, recarregarPlacar } = useApp();
   const [venda, setVenda] = useState(negocio ? deNegocio(negocio) : VENDA_VAZIA);
   const [notes, setNotes] = useState(negocio?.notes ?? '');
@@ -38,14 +41,14 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
     }
     setSalvando(true);
     try {
-      const corpo = { ...venda, series: (venda.series ?? []).filter((s) => String(s).trim()), notes };
+      const corpo = { ...venda, notes };
       let salvo;
       if (modo === 'proposta') {
         salvo = await endpoints.criarNegocio({ clientId: cliente.id, status: 'proposta', ...corpo });
         toast('Proposta registrada. Quando o cliente fechar, é ela que vira a venda.');
       } else if (modo === 'editar') {
         salvo = await endpoints.atualizarNegocio(negocio.id, corpo);
-        toast(salvo.faltamSeries > 0 ? `Salvo. Ainda falta ${salvo.faltamSeries} número(s) de série.` : 'Dados da máquina salvos.');
+        toast('Dados da máquina salvos.');
       } else if (negocio) {
         salvo = await endpoints.atualizarNegocio(negocio.id, { ...corpo, status: 'fechado' });
         toast(`Venda registrada! ${salvo.maquinas} máquina(s). Agora é ativar.`);
@@ -78,6 +81,7 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
         </>
       }
     >
+      {aviso && <p className="card card-pad aviso-venda">{aviso}</p>}
       {modo === 'venda' && !negocio && (
         <p className="mini">
           Se este cliente tem proposta aberta, é ela que vira a venda — não nasce outro registro.
@@ -88,6 +92,7 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
         onChange={setVenda}
         clienteId={modo === 'venda' && !negocio ? cliente.id : undefined}
         titulo={modo === 'proposta' ? 'Dados da proposta' : 'Dados da venda'}
+        proposta={modo === 'proposta'}
       />
       <div className="campo">
         <label htmlFor="rv-notes">Observação</label>

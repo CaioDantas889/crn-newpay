@@ -1,6 +1,6 @@
 // A linha de um negócio (proposta, venda, ativação) do jeito que aparece na
 // ficha do cliente, na tela "Hoje" e no painel do gestor: o que foi vendido,
-// em que pé está e o que ainda falta (série, ativação, confirmação).
+// em que pé está e o que ainda falta (ativação, confirmação).
 
 import { diaMes } from '../lib/date.js';
 
@@ -26,19 +26,6 @@ export function situacaoDoNegocio(n) {
     texto: `Ativada em ${diaMes(n.ativacaoAt)}${n.confirmadaPor ? ` · confirmada por ${n.confirmadaPor.name.split(' ')[0]}` : ' · confirmada'}`,
     tom: 'ok',
   };
-}
-
-export function SeriesChips({ negocio: n }) {
-  if (!n.series?.length && !n.faltamSeries) return null;
-  return (
-    <div className="series">
-      {n.series.map((s) => <span key={s} className="serie" title="Número de série">{s}</span>)}
-      {n.faltamSeries > 0 && <span className="chip chip-alerta">falta {n.faltamSeries} número(s) de série</span>}
-      {n.fotoEtiqueta?.url && (
-        <a className="chip" href={n.fotoEtiqueta.url} target="_blank" rel="noreferrer">etiqueta ↗</a>
-      )}
-    </div>
-  );
 }
 
 /**
@@ -70,7 +57,6 @@ export function NegocioLinha({ negocio: n, acoes, mostrarCliente, mostrarVendedo
           {titulo}
         </b>
         <div className={`mini situacao-${situacao.tom}`}>{situacao.texto}</div>
-        <SeriesChips negocio={n} />
       </div>
       {acoes && <div className="negocio-acoes" onClick={(e) => e.stopPropagation()}>{acoes}</div>}
     </div>

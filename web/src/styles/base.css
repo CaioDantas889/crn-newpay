@@ -352,10 +352,13 @@ ul { margin: 0; padding: 0; list-style: none; }
 .btn-block { width: 100%; }
 .btn-icone { padding: 6px; width: 32px; height: 32px; border-radius: 8px; }
 
-/* No celular o alvo de toque não encolhe junto com o resto */
+/* No celular o alvo de toque não encolhe junto com o resto: o vendedor usa
+   o app em pé, andando, às vezes no sol. 40 px é o mínimo confortável. */
 @media (max-width: 899px) {
-  .btn { min-height: 36px; }
-  .btn-sm { min-height: 30px; }
+  .btn { min-height: 42px; }
+  .btn-sm { min-height: 38px; padding: 6px 11px; font-size: 0.8rem; }
+  .btn-icone { width: 40px; height: 40px; }
+  .opcao { min-height: 38px; padding: 8px 12px; }
 }
 
 /* --------------------------------------------------------- chips e tags */

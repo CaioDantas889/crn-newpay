@@ -272,7 +272,7 @@ ok((await fetch(`${BASE}${visitaFoto.json.visita.fotos[0].url}`)).ok, 'foto fica
 
 const visitaFechada = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: novo.json.id, resultado: 'fechado', notes: 'Fechou na hora.', venda: { maquinas: 2, taxaOfertada: '2mm' } },
+  body: { clientId: novo.json.id, resultado: 'fechado', notes: 'Fechou na hora.', venda: { maquinas: 2, taxaOfertada: '2mm', modelo: 'pro' } },
 });
 ok(visitaFechada.json?.negocio?.status === 'fechado', 'visita "fechado" já abre o negócio', `${visitaFechada.json?.negocio?.maquinas} máquinas`);
 ok(visitaFechada.json?.cliente?.stage === 'fechado', 'cliente vai para "fechado" no funil');
@@ -285,19 +285,53 @@ secao('Propostas, vendas e ativações');
 
 ok(meta.json?.modelosMaquina?.smart && meta.json?.ativacao?.prazoDias > 0, 'vocabulário traz modelos de máquina e prazo de ativação', `${Object.keys(meta.json?.modelosMaquina ?? {}).join(' · ')} · ${meta.json?.ativacao?.prazoDias} dias`);
 
+// Os testes de recusa usam um cliente sem proposta aberta: proposta aberta
+// empresta tabela e modelo para a venda, e aí a venda passaria (de propósito)
+const daCarteira = clientes.json.filter(
+  (c) => c.id !== alvo.id && ['novo', 'contatado'].includes(c.stage) && !(c.machines > 0) && c.leadStatus !== 'fantasma'
+);
+const semProposta = daCarteira[0];
+const outroSemVenda = daCarteira[1];
+ok(Boolean(semProposta && outroSemVenda), 'há clientes sem proposta para os testes de venda', `${daCarteira.length} disponíveis`);
+
 // Venda sem tabela de taxa não entra — nem pela visita, nem direto
 const semTabela = await api('/api/visits', {
-  token: vendedor, method: 'POST', body: { clientId: alvo.id, resultado: 'fechado', venda: { maquinas: 1 } },
+  token: vendedor, method: 'POST', body: { clientId: semProposta.id, resultado: 'fechado', venda: { maquinas: 1, modelo: 'smart' } },
 });
 ok(semTabela.status === 400, 'visita "Fechou" sem tabela de taxa é recusada', semTabela.json?.error);
 ok(
-  (await api('/api/deals', { token: vendedor, method: 'POST', body: { clientId: alvo.id, status: 'fechado', maquinas: 1 } })).status === 400,
+  (await api('/api/deals', { token: vendedor, method: 'POST', body: { clientId: semProposta.id, status: 'fechado', maquinas: 1, modelo: 'smart' } })).status === 400,
   'venda direta sem tabela de taxa é recusada'
 );
 
+// A maquininha vendida é obrigatória em toda venda
+const semModelo = await api('/api/deals', {
+  token: vendedor, method: 'POST', body: { clientId: semProposta.id, status: 'fechado', maquinas: 1, taxaOfertada: '2mm' },
+});
+ok(semModelo.status === 400 && /maquininha/i.test(semModelo.json?.error ?? ''), 'venda sem o modelo da maquininha é recusada', semModelo.json?.error);
+const visitaSemModelo = await api('/api/visits', {
+  token: vendedor, method: 'POST', body: { clientId: semProposta.id, resultado: 'fechado', venda: { maquinas: 1, taxaOfertada: '2mm' } },
+});
+ok(visitaSemModelo.status === 400, 'visita "Fechou" sem o modelo é recusada', visitaSemModelo.json?.error);
+const pipelineSemModelo = await api(`/api/clients/${semProposta.id}`, {
+  token: vendedor, method: 'PATCH', body: { stage: 'fechado', venda: { maquinas: 1, taxaOfertada: '2mm' } },
+});
+ok(pipelineSemModelo.status === 400, 'mover para "fechado" no Pipeline sem o modelo é recusado', pipelineSemModelo.json?.error);
+
 // Mover para "Fechado" no funil sem venda registrada não anda
-const soEtapa = await api(`/api/clients/${alvo.id}`, { token: vendedor, method: 'PATCH', body: { stage: 'fechado' } });
+const soEtapa = await api(`/api/clients/${semProposta.id}`, { token: vendedor, method: 'PATCH', body: { stage: 'fechado' } });
 ok(soEtapa.status === 400 && soEtapa.json?.vendaNecessaria === true, 'funil não vai para "fechado" sem venda registrada', soEtapa.json?.error);
+
+// Com a maquininha informada, o Pipeline registra a venda e o cartão anda
+const pipelineComModelo = await api(`/api/clients/${outroSemVenda.id}`, {
+  token: vendedor, method: 'PATCH', body: { stage: 'fechado', venda: { maquinas: 1, taxaOfertada: '2mm', modelo: 'mini' } },
+});
+const vendaDoPipeline = (await api(`/api/deals?clientId=${outroSemVenda.id}`, { token: vendedor })).json?.find((d) => d.status === 'fechado');
+ok(
+  pipelineComModelo.status === 200 && pipelineComModelo.json?.stage === 'fechado' && vendaDoPipeline?.modelo === 'mini',
+  'mover para "fechado" com a maquininha registra a venda com o modelo',
+  `${vendaDoPipeline?.modeloLabel} · tabela ${vendaDoPipeline?.taxaOfertada}`
+);
 
 const proposta = await api('/api/deals', {
   token: vendedor, method: 'POST',
@@ -309,7 +343,7 @@ const negociosAntes = (await api(`/api/deals?clientId=${alvo.id}`, { token: vend
 // A visita "Fechou" converte a proposta aberta — não nasce um segundo negócio
 const fechouProposta = await api('/api/visits', {
   token: vendedor, method: 'POST',
-  body: { clientId: alvo.id, resultado: 'fechado', venda: { maquinas: 2, taxaOfertada: 'geral d0', series: ['np 0001'] } },
+  body: { clientId: alvo.id, resultado: 'fechado', venda: { maquinas: 2, taxaOfertada: 'geral d0' } },
 });
 ok(fechouProposta.json?.negocio?.id === proposta.json.id, 'visita "Fechou" converte a proposta aberta em venda');
 ok(
@@ -320,15 +354,13 @@ ok(
   (await api(`/api/deals?clientId=${alvo.id}`, { token: vendedor })).json.length === negociosAntes,
   'não nasce um segundo negócio ao fechar'
 );
-ok(
-  fechouProposta.json?.negocio?.series?.[0] === 'NP0001' && fechouProposta.json?.negocio?.faltamSeries === 1,
-  'número de série por máquina: 1 informada (limpa), 1 faltando'
-);
+ok(fechouProposta.json?.negocio?.modeloLabel === 'Smart', 'a venda guarda o modelo da proposta');
+ok(fechouProposta.json?.negocio?.series === undefined, 'número de série não existe no sistema');
 ok(fechouProposta.json?.cliente?.stage === 'fechado', 'cliente vai para "fechado" ao converter a proposta');
 
 // Pendências: vendida sem ativar aparece para o vendedor
 const pend = await api('/api/deals/pendencias', { token: vendedor });
-ok(pend.json?.semAtivar?.some((d) => d.id === proposta.json.id), 'venda sem ativar aparece nas pendências', `${pend.json?.totais?.semAtivar} sem ativar · ${pend.json?.totais?.semSerie} sem série`);
+ok(pend.json?.semAtivar?.some((d) => d.id === proposta.json.id), 'venda sem ativar aparece nas pendências', `${pend.json?.totais?.semAtivar} sem ativar`);
 
 // Ativação com data: futura não vale, antes da venda não vale
 ok(
@@ -341,11 +373,10 @@ ok(
 );
 
 const ativado = await api(`/api/deals/${proposta.json.id}`, {
-  token: vendedor, method: 'PATCH', body: { status: 'ativado', data: hoje, series: ['NP0002'] },
+  token: vendedor, method: 'PATCH', body: { status: 'ativado', data: hoje },
 });
 ok(ativado.json?.status === 'ativado' && ativado.json?.ativacaoAt, 'vendedor declara a ativação', ativado.json?.ativacaoAt?.slice(0, 10));
 ok(ativado.json?.aguardandoConfirmacao === true && ativado.json?.ativacaoConfirmada === false, 'ativação do vendedor fica aguardando a gestão');
-ok(ativado.json?.faltamSeries === 0 && ativado.json?.series?.length === 2, 'série que faltava entra na ativação');
 ok(ativado.json?.tpvRealizado === undefined, 'negocio ativado nao carrega TPV');
 
 const dashDeclarada = await api('/api/dashboard', { token: vendedor });
@@ -513,6 +544,45 @@ ok((await api(`/api/announcements/${naoLido.id}/lido`, { token: vendedor, method
 secao('Painel do gestor');
 
 ok((await api('/api/gestor/indicadores', { token: vendedor })).status === 403, 'vendedor não acessa o painel do gestor');
+
+// Perfil completo de um vendedor: tudo que ele fez, numa ida ao servidor
+const perfil = await api(`/api/gestor/vendedor/${login.json.user.id}/perfil`, { token: gestor });
+ok(perfil.status === 200 && perfil.json?.vendedor?.id === login.json.user.id, 'perfil do vendedor para a gestão', `${perfil.json?.historico?.itens?.length} registro(s) no histórico`);
+ok(
+  perfil.json?.mes?.visitas >= 0 && perfil.json?.carteira?.total > 0 && perfil.json?.hoje?.placar?.meta === 30,
+  'perfil traz mês, carteira e o dia de hoje',
+  `${perfil.json?.mes?.visitas} visitas no mês · ${perfil.json?.carteira?.total} clientes · ${perfil.json?.hoje?.placar?.total} leads hoje`
+);
+ok(
+  perfil.json?.hoje?.semaforo?.cor && perfil.json?.fechamento?.diasUteis > 0 && perfil.json?.conduta?.auditorias,
+  'perfil traz semáforo, fechamento do dia e conduta',
+  `${perfil.json?.hoje?.semaforo?.cor} · ${perfil.json?.fechamento?.fechados}/${perfil.json?.fechamento?.diasUteis} dias fechados`
+);
+const itensPerfil = perfil.json?.historico?.itens ?? [];
+ok(itensPerfil.every((h, i) => i === 0 || new Date(itensPerfil[i - 1].at) >= new Date(h.at)), 'histórico do mais recente para o mais antigo');
+ok(itensPerfil.some((h) => h.tipo === 'visita') && itensPerfil.some((h) => h.tipo === 'venda'), 'histórico junta visitas e vendas');
+ok(
+  (await api(`/api/gestor/vendedor/${login.json.user.id}/perfil?dias=90`, { token: gestor })).json?.historico?.dias === 90,
+  'janela do histórico vai a 90 dias'
+);
+ok(typeof perfil.json?.historico?.truncado === 'boolean' && perfil.json?.historico?.total >= itensPerfil.length, 'histórico diz se foi cortado', `${itensPerfil.length} de ${perfil.json?.historico?.total}`);
+// Follow-up concluído por visita aparece uma vez só (na visita)
+const chaves = itensPerfil.map((h) => `${h.at}|${h.cliente?.id ?? ''}`);
+const repetidosVisitaFollowup = itensPerfil.filter(
+  (h) => h.tipo === 'followup' && itensPerfil.some((o) => o.tipo === 'visita' && o.at === h.at && o.cliente?.id === h.cliente?.id)
+).length;
+ok(repetidosVisitaFollowup === 0, 'revisita de follow-up não aparece duas vezes no histórico', `${chaves.length} itens`);
+ok(
+  (await api(`/api/gestor/vendedor/${login.json.user.id}/perfil?mes=abc`, { token: gestor })).status === 400,
+  'perfil recusa mês inválido'
+);
+ok(
+  (await api(`/api/gestor/vendedor/${login.json.user.id}/perfil?mes=${mes}`, { token: gestor })).json?.mes?.chave === mes,
+  'perfil aceita mês AAAA-MM'
+);
+ok((await api(`/api/gestor/vendedor/${login.json.user.id}/perfil`, { token: vendedor })).status === 403, 'vendedor não abre perfil pela gestão');
+ok((await api('/api/gestor/vendedor/usr_nao_existe/perfil', { token: gestor })).status === 404, 'perfil de vendedor inexistente devolve 404');
+ok((await api(`/api/gestor/vendedor/${gestorLogin.json.user.id}/perfil`, { token: gestor })).status === 400, 'perfil completo é só de vendedor externo');
 
 const visao = await api('/api/gestor/visao-geral', { token: gestor });
 ok(visao.json?.equipe?.length === totalVendedores, 'agenda geral da equipe');
@@ -738,7 +808,7 @@ ok((await api(`/api/deals/${dealTemp.json.id}`, { token: vendedor, method: 'DELE
 
 // Cliente com maquina ativada carrega o resultado do mes: o vendedor nao apaga
 const dealAtivo = await api('/api/deals', {
-  token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 2, status: 'ativado', taxaOfertada: '2mm' },
+  token: vendedor, method: 'POST', body: { clientId: alvo.id, maquinas: 2, status: 'ativado', taxaOfertada: '2mm', modelo: 'smart' },
 });
 const recusa = await api(`/api/clients/${alvo.id}`, { token: vendedor, method: 'DELETE' });
 ok(recusa.status === 409, 'cliente com máquina ativada é protegido', recusa.json?.error?.slice(0, 72));
@@ -753,7 +823,7 @@ const descartavel = await api('/api/clients', {
   token: gestor, method: 'POST', body: { company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
 });
 await api('/api/deals', {
-  token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado', taxaOfertada: '2mm' },
+  token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado', taxaOfertada: '2mm', modelo: 'mini' },
 });
 ok(
   (await api(`/api/clients/${descartavel.json.id}?forcar=1`, { token: vendedor, method: 'DELETE' })).status === 409,

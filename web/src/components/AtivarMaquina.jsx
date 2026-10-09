@@ -1,21 +1,16 @@
-// Ativação da máquina: a data real (não a do clique), o número de série que
-// ainda faltava e o aviso de que a gestão confirma antes de contar na meta.
+// Ativação da máquina: a data real (não a do clique) e o aviso de que a
+// gestão confirma antes de contar na meta.
 
 import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { dateKey, diaMes } from '../lib/date.js';
 import { Modal } from './ui.jsx';
-import { SeriesCampos } from './lead.jsx';
-import { SeriesChips } from './Negocio.jsx';
 
 export default function AtivarMaquina({ negocio: n, onFechar, onAtivado }) {
   const { meta, toast, ehGestor, recarregarPlacar, recarregarNotificacoes } = useApp();
   const hoje = dateKey();
   const [data, setData] = useState(hoje);
-  const faltam = n.faltamSeries ?? Math.max(0, (n.maquinas || 1) - (n.series?.length ?? 0));
-  const [series, setSeries] = useState(Array.from({ length: faltam }, () => ''));
-  const [fotoEtiqueta, setFotoEtiqueta] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
   const minimo = n.fechamentoAt ? dateKey(n.fechamentoAt) : undefined;
@@ -25,12 +20,7 @@ export default function AtivarMaquina({ negocio: n, onFechar, onAtivado }) {
     if (!data) return toast('Informe o dia da ativação.', 'erro');
     setSalvando(true);
     try {
-      const atual = await endpoints.atualizarNegocio(n.id, {
-        status: 'ativado',
-        data,
-        series: series.filter((s) => String(s).trim()),
-        ...(fotoEtiqueta ? { fotoEtiqueta } : {}),
-      });
+      const atual = await endpoints.atualizarNegocio(n.id, { status: 'ativado', data });
       toast(
         exigeConfirmacao
           ? 'Ativação registrada. Entra na meta quando a gestão confirmar.'
@@ -67,7 +57,6 @@ export default function AtivarMaquina({ negocio: n, onFechar, onAtivado }) {
           {n.taxaOfertada ? ` · tabela ${n.taxaOfertada}` : ''}
         </b>
         <span className="mini">Vendida em {diaMes(n.fechamentoAt)}</span>
-        <SeriesChips negocio={{ ...n, faltamSeries: 0 }} />
       </div>
 
       <div className="campo">
@@ -78,18 +67,6 @@ export default function AtivarMaquina({ negocio: n, onFechar, onAtivado }) {
         />
         <p className="mini">O dia da ativação é o que conta na meta do mês. Hoje já vem marcado.</p>
       </div>
-
-      {faltam > 0 && (
-        <SeriesCampos
-          series={series}
-          onChange={setSeries}
-          onFoto={setFotoEtiqueta}
-          rotulo={faltam === n.maquinas ? 'Número de série' : `Número de série que faltava`}
-          inicio={(n.series?.length ?? 0) + 1}
-          dica="Leia o código da etiqueta ou digite. A gestão confere pela série."
-        />
-      )}
-      {fotoEtiqueta && <p className="mini">▣ Foto da etiqueta anexada.</p>}
 
       <p className="mini">
         {exigeConfirmacao

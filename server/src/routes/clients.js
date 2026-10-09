@@ -27,7 +27,7 @@ import {
   reagendarFollowup, salvarPrint,
 } from '../followups.js';
 import { termoPendente } from '../auditoria.js';
-import { expandirNegocio, faltaNaVenda, temVenda } from '../vendas.js';
+import { expandirNegocio, faltaNaVenda, negocioAberto, temVenda } from '../vendas.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -238,7 +238,19 @@ router.get('/checar', (req, res) => {
     telefones: [req.query.whatsapp, req.query.phone].filter(Boolean),
     documento: req.query.cnpj ?? '',
   });
-  res.json({ duplicado: Boolean(duplicado), mensagem: duplicado?.mensagem ?? null });
+  // Lojista que já está na carteira de quem cadastra: o certo é registrar a
+  // visita na ficha dele, e o formulário oferece o atalho
+  const existente = duplicado?.clientId ? find('clients', duplicado.clientId) : null;
+  const visivel = existente && podeVer(existente, req.user);
+  const seu = Boolean(existente && existente.ownerId === req.user.id);
+  res.json({
+    duplicado: Boolean(duplicado),
+    mensagem: seu
+      ? `Este lojista já está na sua carteira (${existente.company || existente.name}). Registre a visita na ficha dele.`
+      : duplicado?.mensagem ?? null,
+    clientId: visivel ? existente.id : null,
+    seu,
+  });
 });
 
 /** GET /api/clients/cnpj/:cnpj — consulta na Receita (BrasilAPI) para o lead remoto */
@@ -299,10 +311,8 @@ router.get('/:id', (req, res) => {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .map((d) => expandirNegocio(d));
 
-  // O que a ficha precisa cobrar: série faltando, máquina sem ativar e
-  // ativação esperando a gestão
+  // O que a ficha precisa cobrar: máquina sem ativar e ativação esperando a gestão
   const pendencias = {
-    faltamSeries: negocios.reduce((s, d) => s + (d.faltamSeries || 0), 0),
     semAtivar: negocios.filter((d) => d.status === 'fechado').length,
     aguardandoConfirmacao: negocios.filter((d) => d.aguardandoConfirmacao).length,
     propostaAberta: negocios.some((d) => ['proposta', 'negociacao'].includes(d.status)),
@@ -425,6 +435,24 @@ router.post('/', async (req, res, next) => {
       return res.status(403).json({ error: 'Aceite o Termo de Conduta antes de cadastrar leads.' });
     }
 
+    // Reenvio do mesmo cadastro (4G caiu depois de o servidor gravar): devolve o
+    // lead já salvo em vez de acusar "duplicado" do próprio vendedor
+    const chave = typeof b.chave === 'string' ? b.chave.slice(0, 64) : '';
+    if (chave) {
+      const jaSalvo = table('clients').find((c) => c.cadastroChave === chave && c.cadastradoPor === req.user.id);
+      if (jaSalvo) {
+        const agoraRepetido = new Date();
+        return res.status(200).json({
+          ...enriquecer(jaSalvo, agoraRepetido),
+          followup: null,
+          negocio: null,
+          placar: placarDoDia(req.user.id, agoraRepetido),
+          avisos: [],
+          repetido: true,
+        });
+      }
+    }
+
     const agora = new Date();
     const presencial = origem === 'presencial';
     const nome = String(b.name ?? '').trim();
@@ -521,6 +549,21 @@ router.post('/', async (req, res, next) => {
       avisos.push(`Você já tem ${META_LEADS.maxRemotos} remotos hoje: este fica salvo, mas não conta na meta.`);
     }
 
+    // Presencial: a cidade é a da loja cadastrada mais perto (até 8 km) — a
+    // cidade-base do vendedor erra quando ele roda o interior
+    let cidadeVizinha = null;
+    if (presencial) {
+      let maisPerto = 8;
+      for (const c of table('clients')) {
+        if (!c.city || !Number(c.lat) || !Number(c.lng)) continue;
+        const km = haversine({ lat, lng }, { lat: Number(c.lat), lng: Number(c.lng) });
+        if (km < maisPerto) {
+          maisPerto = km;
+          cidadeVizinha = c.city;
+        }
+      }
+    }
+
     /* ----------------------------------------------------------- o lead */
     const diagnostico = {
       maquinaAtual: MAQUINAS[b.maquinaAtual] ? b.maquinaAtual : null,
@@ -544,13 +587,14 @@ router.post('/', async (req, res, next) => {
       cnpj: cnpjValido(b.cnpj) ? formatarCnpj(b.cnpj) : String(b.cnpj ?? '').trim(),
       phone: String(b.phone ?? '').trim() || whatsapp,
       whatsapp,
-      city: String(b.city ?? '').trim() || consulta?.municipio || req.user.city,
+      city: String(b.city ?? '').trim() || consulta?.municipio || cidadeVizinha || req.user.city,
       region: '',
       address: String(b.address ?? '').trim() || consulta?.endereco || '',
       lat: presencial ? lat : Number(req.user.base?.lat) || 0,
       lng: presencial ? lng : Number(req.user.base?.lng) || 0,
       ownerId: req.user.id,
       cadastradoPor: req.user.id,
+      cadastroChave: chave || null,
       diagnostico,
       score,
       temperature: temperaturaPorScore(score),
@@ -662,7 +706,7 @@ router.patch('/:id', (req, res) => {
   // dados da venda.
   if (patch.stage === 'fechado' && cliente.stage !== 'fechado') {
     if (req.body.venda) {
-      const falta = faltaNaVenda(req.body.venda);
+      const falta = faltaNaVenda(req.body.venda, negocioAberto(cliente.id));
       if (falta) return res.status(400).json({ error: falta });
       delete patch.stage;
       aplicarResultado(cliente, 'fechado', {

@@ -17,6 +17,7 @@ import FecharDia from './pages/FecharDia.jsx';
 import Expediente from './pages/Expediente.jsx';
 import Mais from './pages/Mais.jsx';
 import Equipe from './pages/Equipe.jsx';
+import PerfilVendedor from './pages/PerfilVendedor.jsx';
 import PainelGestor from './pages/PainelGestor.jsx';
 import Auditoria from './pages/Auditoria.jsx';
 import AceiteTermo from './components/AceiteTermo.jsx';
@@ -122,6 +123,10 @@ export default function App() {
           <Route
             path="/equipe"
             element={ehGestor ? <Equipe /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/equipe/:id"
+            element={ehGestor ? <PerfilVendedor /> : <Navigate to="/" replace />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

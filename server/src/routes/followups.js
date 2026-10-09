@@ -11,7 +11,7 @@ import { AVISO_FANTASMA, RESULTADOS_VISITA } from '../domain.js';
 import { endOfDay, startOfDay } from '../lib/dates.js';
 import { consultarCnpj } from '../lib/cnpj.js';
 import { salvarVarios } from '../lib/uploads.js';
-import { faltaNaVenda } from '../vendas.js';
+import { faltaNaVenda, negocioAberto } from '../vendas.js';
 import {
   atrasadosEm, motivoDoStatus, placarDoDia, sequenciaMetaCompleta, statusDoLead, tentarValidar,
 } from '../leads.js';
@@ -90,7 +90,7 @@ router.post('/:id/concluir', async (req, res, next) => {
       return res.status(400).json({ error: 'Follow-up só é concluído com o resultado do contato.' });
     }
     if (b.resultado === 'fechado') {
-      const falta = faltaNaVenda(b.venda);
+      const falta = faltaNaVenda(b.venda, negocioAberto(tarefa.clientId));
       if (falta) return res.status(400).json({ error: falta });
     }
 

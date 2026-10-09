@@ -382,6 +382,7 @@ export default function Pipeline() {
       {vendaPara && (
         <RegistrarVenda
           cliente={vendaPara}
+          aviso="Para mover para Fechado, diga qual maquininha o cliente comprou. Sem isso o cartão fica onde estava."
           onFechar={() => setVendaPara(null)}
           onSalvo={(negocio) =>
             setDados((lista) =>

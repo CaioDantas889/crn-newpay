@@ -1,8 +1,8 @@
 // Propostas, vendas e ativações — a parte do funil que vira faturamento.
 //
 // Um registro por negociação: a proposta vira venda (não nasce outra), a venda
-// guarda modelo e número de série, e a ativação tem data própria e passa pela
-// confirmação da gestão antes de contar na meta e no ranking.
+// guarda quantidade, tabela e modelo, e a ativação tem data própria e passa
+// pela confirmação da gestão antes de contar na meta e no ranking.
 
 import { Router } from 'express';
 import { find, id, insert, logActivity, remove, table, update } from '../store.js';
@@ -11,7 +11,7 @@ import { etapaDepoisDe } from '../domain.js';
 import { aplicarResultado } from '../followups.js';
 import {
   STATUS_ABERTOS, STATUS_VENDIDOS, ativarVenda, confirmarAtivacao, dadosDaVenda, dataDeAtivacao,
-  expandirNegocio, faltaNaVenda, pendenciasDeAtivacao, recusarAtivacao, removerAnexosDoNegocio,
+  expandirNegocio, faltaNaVenda, negocioAberto, pendenciasDeAtivacao, recusarAtivacao,
 } from '../vendas.js';
 
 const router = Router();
@@ -44,7 +44,7 @@ router.get('/pendencias', (req, res) => {
 
 /**
  * POST /api/deals
- * body: { clientId, status, maquinas, taxaOfertada, modelo, series[], notes,
+ * body: { clientId, status, maquinas, taxaOfertada, modelo, notes,
  *         data (só para status 'ativado') }
  * Proposta por padrão. Com status 'fechado' é venda direta: a proposta aberta
  * do cliente, se houver, é a que vira venda.
@@ -61,7 +61,7 @@ router.post('/', (req, res) => {
   const agora = new Date();
 
   if (STATUS_VENDIDOS.includes(status)) {
-    const falta = faltaNaVenda(b);
+    const falta = faltaNaVenda(b, negocioAberto(cliente.id));
     if (falta) return res.status(400).json({ error: falta });
     if (status === 'ativado') {
       const quando = dataDeAtivacao(b.data, {}, agora);
@@ -91,8 +91,6 @@ router.post('/', (req, res) => {
     maquinas: dados.maquinas ?? 1,
     taxaOfertada: dados.taxaOfertada ?? null,
     modelo: dados.modelo ?? null,
-    series: dados.series ?? [],
-    fotoEtiqueta: dados.fotoEtiqueta ?? null,
     status,
     propostaAt: quando,
     fechamentoAt: null,
@@ -115,10 +113,9 @@ router.post('/', (req, res) => {
 
 /**
  * PATCH /api/deals/:id
- * Edita a venda (máquinas, tabela, modelo, números de série, foto da
- * etiqueta) e avança o negócio: 'fechado' converte a proposta em venda,
- * 'ativado' declara a ativação (body.data = dia real, body.series = o que
- * faltava), 'perdido' encerra.
+ * Edita a venda (máquinas, tabela, modelo) e avança o negócio: 'fechado'
+ * converte a proposta em venda, 'ativado' declara a ativação (body.data = dia
+ * real), 'perdido' encerra.
  */
 router.patch('/:id', (req, res) => {
   const negocio = find('deals', req.params.id);
@@ -132,22 +129,14 @@ router.patch('/:id', (req, res) => {
   const cliente = find('clients', negocio.clientId);
   const dados = dadosDaVenda(b);
 
-  // Na ativação, a série informada é a que faltava: soma às que já estavam,
-  // em vez de substituir a lista
-  const seriesDaAtivacao = b.status === 'ativado' && negocio.status !== 'ativado' ? dados.series : undefined;
-  if (seriesDaAtivacao !== undefined) delete dados.series;
-  const depois = { ...negocio, ...dados };
-
-  if ((dados.series ?? []).length > (depois.maquinas || 1)) {
-    return res.status(400).json({ error: `São ${depois.maquinas} máquina(s) e ${dados.series.length} números de série.` });
-  }
-
   // Só edição de campos
   if (!b.status || b.status === negocio.status) {
     if (STATUS_VENDIDOS.includes(negocio.status) && 'taxaOfertada' in dados && !dados.taxaOfertada) {
       return res.status(400).json({ error: 'Venda registrada precisa de tabela de taxa.' });
     }
-    if (dados.fotoEtiqueta !== undefined && negocio.fotoEtiqueta?.url) removerAnexosDoNegocio(negocio);
+    if (STATUS_VENDIDOS.includes(negocio.status) && 'modelo' in dados && !dados.modelo) {
+      return res.status(400).json({ error: 'Venda registrada precisa do modelo da maquininha.' });
+    }
     return res.json(expandirNegocio(update('deals', negocio.id, dados)));
   }
 
@@ -189,7 +178,7 @@ router.patch('/:id', (req, res) => {
 
   if (b.status === 'ativado') {
     if (negocio.status === 'ativado') return res.json(expandirNegocio(atual));
-    const r = ativarVenda(atual, { user: req.user, data: b.data, series: seriesDaAtivacao, agora });
+    const r = ativarVenda(atual, { user: req.user, data: b.data, agora });
     if (r.erro) return res.status(400).json({ error: r.erro });
     atual = r.negocio;
     update('clients', cliente.id, { lastContactAt: agora.toISOString() });
@@ -236,7 +225,6 @@ router.delete('/:id', (req, res) => {
   if (cliente && STATUS_VENDIDOS.includes(negocio.status)) {
     update('clients', cliente.id, { machines: Math.max(0, (cliente.machines || 0) - (negocio.maquinas || 1)) });
   }
-  removerAnexosDoNegocio(negocio);
   remove('deals', negocio.id);
   res.json({ ok: true });
 });

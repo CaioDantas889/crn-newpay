@@ -2,6 +2,7 @@
 // É por aqui que a operação entra no ar — sem depender do seed.
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { mascaraTelefone } from '../lib/mascaras.js';
@@ -29,6 +30,7 @@ const VAZIO = {
 
 export default function Equipe() {
   const { user, toast } = useApp();
+  const navigate = useNavigate();
   const { dados: equipe, carregando, recarregar } = useRecurso(() => endpoints.usuarios(), []);
   const [editando, setEditando] = useState(null);
   const [senhaGerada, setSenhaGerada] = useState(null);
@@ -102,6 +104,12 @@ export default function Equipe() {
                 </div>
 
                 <div className="detalhe-acoes">
+                  {/* Vendedor externo tem perfil completo: tudo que ele fez, numa tela */}
+                  {pessoa.role === 'vendedor' && (
+                    <button className="btn btn-primary btn-sm" onClick={() => navigate(`/equipe/${pessoa.id}`)}>
+                      ◉ Perfil
+                    </button>
+                  )}
                   <button className="btn btn-sm" onClick={() => setEditando(pessoa)}>Editar</button>
                   {pessoa.id === user.id ? (
                     // Resetar a própria senha derrubaria a sessão no meio do caminho:

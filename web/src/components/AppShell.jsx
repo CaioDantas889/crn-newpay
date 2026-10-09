@@ -17,6 +17,27 @@ import EventoModal from './EventoModal.jsx';
 const railClasse = ({ isActive }) => `rail-item${isActive ? ' ativo' : ''}`;
 const bottomClasse = ({ isActive }) => (isActive ? 'ativo' : undefined);
 
+// Nome de cada tela na aba do navegador e na lista de apps abertos do celular
+const TITULOS = [
+  [/^\/carteira\/[^/]+/, 'Cliente'],
+  [/^\/carteira/, 'Carteira'],
+  [/^\/pipeline/, 'Pipeline'],
+  [/^\/dia/, 'Agenda'],
+  [/^\/calendario/, 'Calendário'],
+  [/^\/expediente/, 'Expediente'],
+  [/^\/fechar-dia/, 'Fechar o dia'],
+  [/^\/ranking/, 'Ranking'],
+  [/^\/tarefas/, 'Tarefas'],
+  [/^\/biblioteca/, 'Biblioteca'],
+  [/^\/objecoes/, 'Argumentos'],
+  [/^\/avisos/, 'Avisos'],
+  [/^\/gestor/, 'Painel do gestor'],
+  [/^\/equipe\/[^/]+/, 'Perfil do vendedor'],
+  [/^\/equipe/, 'Equipe'],
+  [/^\/auditoria/, 'Auditoria'],
+  [/^\/mais/, 'Mais'],
+];
+
 export default function AppShell() {
   const { user, sair, notificacoes, placar, ehGestor, ehVendedor, ehOnboarding } = useApp();
   const navigate = useNavigate();
@@ -32,6 +53,27 @@ export default function AppShell() {
   const caixaBusca = useRef(null);
 
   const hoje = dateKey();
+
+  useEffect(() => {
+    const nome = pathname === '/' ? (ehGestor ? 'Início' : 'Hoje') : TITULOS.find(([re]) => re.test(pathname))?.[1];
+    document.title = nome ? `${nome} · NewPay CRM` : 'NewPay CRM';
+  }, [pathname, ehGestor]);
+
+  // "Visitei" e "+ Lead" saem da frente ao rolar para baixo (cobriam o botão
+  // "Registrar resultado" dos cartões) e voltam ao rolar para cima
+  const [fabRecolhido, setFabRecolhido] = useState(false);
+  useEffect(() => {
+    let ultimo = window.scrollY;
+    const aoRolar = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - ultimo) < 8) return;
+      setFabRecolhido(y > ultimo && y > 120);
+      ultimo = y;
+    };
+    window.addEventListener('scroll', aoRolar, { passive: true });
+    return () => window.removeEventListener('scroll', aoRolar);
+  }, []);
+  useEffect(() => setFabRecolhido(false), [pathname]);
 
   // Busca global: sugere clientes enquanto digita
   useEffect(() => {
@@ -265,7 +307,7 @@ export default function AppShell() {
 
       {/* Lead novo é a ação principal do dia; "Visitei" registra a revisita de quem já está na base */}
       {ehVendedor && (
-        <div className="fab-grupo">
+        <div className={`fab-grupo${fabRecolhido ? ' recolhido' : ''}`}>
           <button className="fab fab-secundario" onClick={() => setModal('visita')}>✓ Visitei</button>
           <button className="fab" onClick={() => setModal('cliente')}>+ Lead</button>
         </div>

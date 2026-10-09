@@ -238,6 +238,10 @@ function Trajeto({ linha, data, onFechar }) {
       subtitulo={`${diaMes(`${data}T12:00:00`)} · ${linha.hoje.total} leads · ${linha.atrasados} follow-up(s) atrasado(s)`}
       onFechar={onFechar}
     >
+      <div className="linha">
+        <Link className="btn btn-primary btn-sm" to={`/equipe/${linha.vendedor.id}`}>◉ Perfil completo</Link>
+        <span className="mini">Tudo que o vendedor fez, mês a mês.</span>
+      </div>
       {erro && !dados ? (
         <Falha erro={erro} titulo="Não consegui carregar o dia do vendedor" />
       ) : carregando || !dados ? (

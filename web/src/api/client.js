@@ -179,6 +179,7 @@ export const endpoints = {
   kpisEquipe: (dias) => api.get(`/gestor/kpis${qs({ dias })}`),
   semaforo: (data) => api.get(`/gestor/semaforo${qs({ data })}`),
   trajeto: (userId, data) => api.get(`/gestor/vendedor/${userId}/trajeto${qs({ data })}`),
+  perfilVendedor: (userId, params) => api.get(`/gestor/vendedor/${userId}/perfil${qs(params)}`),
 
   // auditoria semanal, ocorrências e termo de conduta
   auditoria: () => api.get('/auditoria'),

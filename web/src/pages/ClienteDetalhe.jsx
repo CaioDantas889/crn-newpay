@@ -28,7 +28,10 @@ export default function ClienteDetalhe() {
   const { meta, toast, recarregarNotificacoes, recarregarPlacar, ehGestor } = useApp();
 
   const { dados: cliente, carregando, erro, recarregar } = useRecurso(() => endpoints.cliente(id), [id]);
-  const [modal, setModal] = useState(params.get('diagnostico') ? 'diagnostico' : null);
+  // ?visita=1 chega do aviso de duplicado do "+ Lead": abre direto a revisita
+  const [modal, setModal] = useState(
+    params.get('visita') ? 'visita' : params.get('diagnostico') ? 'diagnostico' : null
+  );
   const [negocioModal, setNegocioModal] = useState(null); // { modo: 'venda' | 'proposta' | 'editar', negocio? }
   const [ativar, setAtivar] = useState(null);
   const [excluir, setExcluir] = useState(null);
@@ -58,7 +61,9 @@ export default function ClienteDetalhe() {
 
   // "Fechado" é venda: sem venda registrada, a etapa abre o formulário da venda
   const moverFunil = async (stage) => {
-    if (stage === 'fechado' && !cliente.pendencias?.temVenda) return setNegocioModal({ modo: 'venda' });
+    if (stage === 'fechado' && !cliente.pendencias?.temVenda) {
+      return setNegocioModal({ modo: 'venda', aviso: 'Para mover para Fechado, diga qual maquininha o cliente comprou.' });
+    }
     try {
       await endpoints.atualizarCliente(cliente.id, { stage });
       toast(`Cliente movido para ${meta.funil[stage].label.toLowerCase()}.`);
@@ -137,7 +142,7 @@ export default function ClienteDetalhe() {
         <>
           <button className="btn btn-brand btn-sm" onClick={() => setAtivar(n)}>Ativar</button>
           <button className="btn btn-sm" onClick={() => setNegocioModal({ modo: 'editar', negocio: n })}>
-            {n.faltamSeries > 0 ? 'Informar série' : 'Editar'}
+            Editar
           </button>
         </>
       );
@@ -151,13 +156,7 @@ export default function ClienteDetalhe() {
       );
     }
     if (n.aguardandoConfirmacao) return <span className="chip chip-alerta">aguardando gestão</span>;
-    if (n.status === 'ativado') {
-      return n.faltamSeries > 0 ? (
-        <button className="btn btn-sm" onClick={() => setNegocioModal({ modo: 'editar', negocio: n })}>Informar série</button>
-      ) : (
-        <span className="chip chip-ok">Ativada</span>
-      );
-    }
+    if (n.status === 'ativado') return <span className="chip chip-ok">Ativada</span>;
     return null;
   };
 
@@ -271,14 +270,9 @@ export default function ClienteDetalhe() {
           </div>
         )}
 
-        <div className="entre" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-          <span className="mini">
-            Cliente cadastrado em {diaMes(cliente.createdAt)} · {cliente.visitas.length} visita(s) registrada(s)
-          </span>
-          <button className="btn btn-danger btn-sm" onClick={() => setExcluir({ tipo: 'cliente' })}>
-            ✕ Excluir cliente
-          </button>
-        </div>
+        <span className="mini" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+          Cliente cadastrado em {diaMes(cliente.createdAt)} · {cliente.visitas.length} visita(s) registrada(s)
+        </span>
       </div>
 
       {/* -------------------------------------------- prova do lead */}
@@ -503,7 +497,6 @@ export default function ClienteDetalhe() {
                 : cliente.pendencias?.aguardandoConfirmacao > 0
                   ? 'ativação aguardando a gestão'
                   : `${cliente.negocios.length} registro(s)`}
-              {cliente.pendencias?.faltamSeries > 0 ? ` · falta ${cliente.pendencias.faltamSeries} número(s) de série` : ''}
             </p>
           </div>
           <div className="linha">
@@ -629,6 +622,15 @@ export default function ClienteDetalhe() {
         </div>
       </div>
 
+      {/* Excluir fica no fim da ficha, longe de Ligar e Registrar visita:
+          no celular, um toque errado ali não pode apagar o cliente */}
+      <div className="entre zona-perigo">
+        <span className="mini">Apagar este cliente leva junto visitas, propostas e compromissos.</span>
+        <button className="btn btn-danger btn-sm" onClick={() => setExcluir({ tipo: 'cliente' })}>
+          ✕ Excluir cliente
+        </button>
+      </div>
+
       {modal === 'diagnostico' && (
         <DiagnosticoModal cliente={cliente} onFechar={() => setModal(null)} onSalvo={recarregar} />
       )}
@@ -646,6 +648,7 @@ export default function ClienteDetalhe() {
           cliente={cliente}
           negocio={negocioModal.negocio ?? null}
           modo={negocioModal.modo}
+          aviso={negocioModal.aviso}
           onFechar={() => setNegocioModal(null)}
           onSalvo={recarregar}
         />

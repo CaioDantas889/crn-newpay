@@ -3,6 +3,7 @@
 // com a sequência de dias de meta completa. Mês: pódio, níveis e ativações.
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { Avatar, Carregando, Falha, Progresso, Vazio } from '../components/ui.jsx';
@@ -114,7 +115,8 @@ function RankingDeLeads({ periodo }) {
 /* ------------------------------------------------- mês: ativações e níveis */
 
 function RankingDoMes() {
-  const { user } = useApp();
+  const { user, ehGestor } = useApp();
+  const navigate = useNavigate();
   const { dados, carregando, erro } = useRecurso(() => endpoints.ranking(), []);
 
   if (erro && !dados) return <Falha erro={erro} titulo="Não consegui carregar o ranking" />;
@@ -246,7 +248,12 @@ function RankingDoMes() {
             </thead>
             <tbody>
               {linhas.map((l) => (
-                <tr key={l.vendedor.id}>
+                // Para a gestão, a linha abre o perfil completo do vendedor
+                <tr
+                  key={l.vendedor.id}
+                  className={ehGestor ? 'linha-clicavel' : undefined}
+                  onClick={ehGestor ? () => navigate(`/equipe/${l.vendedor.id}`) : undefined}
+                >
                   <td>
                     <div className="linha">
                       <Avatar nome={l.vendedor.name} cor={l.vendedor.color} pequeno />

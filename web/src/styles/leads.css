@@ -38,6 +38,10 @@
   box-shadow: var(--shadow);
 }
 @media (min-width: 900px) { .fab-grupo { bottom: 22px; right: 22px; } }
+@media (max-width: 899px) {
+  .fab-grupo { transition: transform 0.2s ease, opacity 0.2s ease; }
+  .fab-grupo.recolhido { transform: translateY(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+}
 
 /* --------------------------------------------------------- cadastro de lead */
 .aviso-fantasma {
@@ -169,21 +173,6 @@ button.cliente-linha {
 
 /* ------------------------------------------------- venda e ativação */
 .venda-campos { background: var(--ok-bg); border-color: var(--ok-line); }
-.serie-linha { display: flex; gap: 6px; }
-.serie-linha + .serie-linha { margin-top: 6px; }
-.serie-linha .input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.04em;
-}
-.series { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; align-items: center; }
-.serie {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.7rem; letter-spacing: 0.04em;
-  padding: 2px 6px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
-}
-.leitor { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-.leitor-video {
-  width: 100%; max-height: 240px; object-fit: cover; border-radius: var(--radius-sm);
-  background: #000; border: 1px solid var(--line);
-}
 .negocio .info > b { font-size: 0.86rem; }
 .negocio.fechado.atrasada { box-shadow: inset 3px 0 0 var(--red); }
 .negocio.clicavel { cursor: pointer; }
@@ -194,3 +183,23 @@ button.cliente-linha {
 .situacao-ok { color: var(--ok-fg); }
 .ativacoes-topo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 @media (min-width: 760px) { .ativacoes-topo { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* ------------------------------------------------- perfil do vendedor */
+.perfil-cabeca h1 { font-size: 1.25rem; line-height: 1.2; }
+.perfil-cabeca .avatar { width: 48px; height: 48px; font-size: 1rem; flex: none; }
+.tl-dia { padding: 10px 12px 2px; }
+.tl-conteudo { display: flex; flex-direction: column; gap: 2px; }
+.tl-conteudo > b { font-size: 0.84rem; }
+.tl-conteudo.clicavel { cursor: pointer; }
+.tl-conteudo.clicavel:hover > b { color: var(--brand-strong); }
+tr.linha-clicavel { cursor: pointer; }
+tr.linha-clicavel:hover td { background: var(--surface-2); }
+/* Perfil recarregando (troca de mês ou de janela): a tela esmaece até chegar */
+.page.esmaecido { opacity: 0.62; pointer-events: none; transition: opacity 0.15s; }
+.funil-linha:disabled { cursor: default; }
+
+/* Ficha do cliente: excluir mora no fim, longe das ações de campo */
+.zona-perigo { padding: 10px 12px; border: 1px dashed var(--erro-line); border-radius: var(--radius-sm); }
+
+/* Por que o formulário da venda abriu (ex.: cartão levado para Fechado) */
+.aviso-venda { background: var(--alerta-bg); border-color: var(--alerta-line); color: var(--alerta-fg); font-weight: 600; font-size: 0.82rem; }

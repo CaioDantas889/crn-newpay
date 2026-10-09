@@ -4,6 +4,7 @@
 
 import { id, save, table } from './store.js';
 import { atualizarPendencia } from './followups.js';
+import { removerArquivo } from './lib/uploads.js';
 
 /**
  * Follow-up virou tarefa do motor de cadência (só sai com resultado). O que
@@ -60,16 +61,15 @@ function dataDaEtapa() {
 }
 
 /**
- * A venda passou a guardar modelo e números de série, e a ativação passou a
- * ser confirmada pela gestão. O que já estava ativado continua contando — a
- * confirmação é carimbada como migração, não como decisão de alguém.
+ * A venda passou a guardar o modelo, e a ativação passou a ser confirmada
+ * pela gestão. O que já estava ativado continua contando — a confirmação é
+ * carimbada como migração, não como decisão de alguém.
  */
 function maquinasDaVenda() {
   let ajustados = 0;
   let confirmados = 0;
   for (const d of table('deals')) {
     let mudou = false;
-    if (!Array.isArray(d.series)) { d.series = []; mudou = true; }
     if (d.modelo === undefined) { d.modelo = null; mudou = true; }
     // Registro de antes da confirmação (nunca teve "declarada em"). O que já
     // nasceu como declaração do vendedor fica esperando a gestão.
@@ -125,17 +125,38 @@ function propostasQueViraramVenda() {
   return fundidas.size;
 }
 
+/**
+ * Número de série saiu do CRM (decisão da operação em 09/10/2026). Venda
+ * gravada no tempo em que ele existia perde o campo e a foto da etiqueta.
+ */
+function semNumeroDeSerie() {
+  let limpos = 0;
+  for (const d of table('deals')) {
+    if (!('series' in d) && !('fotoEtiqueta' in d)) continue;
+    if (d.fotoEtiqueta?.url) removerArquivo(d.fotoEtiqueta.url);
+    delete d.series;
+    delete d.fotoEtiqueta;
+    limpos += 1;
+  }
+  return limpos;
+}
+
 export function migrar() {
   const followups = followupsDaAgenda();
   const etapas = dataDaEtapa();
   const maquinas = maquinasDaVenda();
   const fundidas = propostasQueViraramVenda();
+  const semSerie = semNumeroDeSerie();
+  if (semSerie) {
+    save();
+    console.log(`[migração] número de série removido de ${semSerie} negócio(s).`);
+  }
   if (followups || etapas || maquinas.ajustados || fundidas) {
     save();
     if (followups) console.log(`[migração] ${followups} follow-up(s) da agenda agora exigem resultado (tela "Hoje").`);
     if (etapas) console.log(`[migração] ${etapas} cliente(s) ganharam a data da etapa do funil.`);
     if (maquinas.ajustados) {
-      console.log(`[migração] ${maquinas.ajustados} negócio(s) ganharam modelo e número de série; ${maquinas.confirmados} ativação(ões) antigas seguem contando.`);
+      console.log(`[migração] ${maquinas.ajustados} negócio(s) ganharam o campo modelo; ${maquinas.confirmados} ativação(ões) antigas seguem contando.`);
     }
     if (fundidas) console.log(`[migração] ${fundidas} proposta(s) que já tinham virado venda foram fundidas à venda.`);
   }

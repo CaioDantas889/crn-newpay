@@ -8,7 +8,6 @@ import { useApp } from '../state/app.jsx';
 import { pegarPosicao } from '../lib/contato.js';
 import { prepararPrint } from '../lib/imagem.js';
 import { dateKey, pad } from '../lib/date.js';
-import LeitorCodigo from './LeitorCodigo.jsx';
 
 /** Fechou · Quente · Morno · Frio · Sem CNPJ · Não atendeu */
 export function ResultadoChips({ valor, onChange, rotulo = 'Resultado da visita' }) {
@@ -34,74 +33,22 @@ export function ResultadoChips({ valor, onChange, rotulo = 'Resultado da visita'
   );
 }
 
-export const VENDA_VAZIA = { maquinas: 1, taxaOfertada: '', modelo: '', series: [] };
+export const VENDA_VAZIA = { maquinas: 1, taxaOfertada: '', modelo: '' };
 
 /** O que falta para a venda valer na tela (o servidor confere de novo) */
 export function faltaNaVenda(venda) {
+  if (!venda?.modelo) return 'Escolha qual maquininha foi vendida.';
   if (!venda?.taxaOfertada) return 'Escolha a tabela de taxa da venda.';
-  const series = (venda.series ?? []).filter((s) => String(s).trim());
-  const maquinas = Math.max(1, Number(venda.maquinas) || 1);
-  if (series.length > maquinas) return `São ${maquinas} máquina(s) e ${series.length} números de série.`;
   return null;
 }
 
-/** Número de série limpo do jeito que o servidor guarda */
-export const limparSerie = (v) => String(v ?? '').toUpperCase().replace(/\s+/g, '').slice(0, 40);
-
 /**
- * Um campo por máquina, com leitura pela câmera. `series` tem sempre o tamanho
- * do número de máquinas; vazio é série ainda não informada.
- */
-export function SeriesCampos({ series, onChange, onFoto, rotulo = 'Número de série', inicio = 1, dica }) {
-  const [lendo, setLendo] = useState(null);
-
-  const trocar = (i, valor) => {
-    const prox = [...series];
-    prox[i] = limparSerie(valor);
-    onChange(prox);
-  };
-
-  return (
-    <div className="campo">
-      <label>{rotulo}{series.length > 1 ? ` (${series.length})` : ''}</label>
-      {series.map((s, i) => (
-        <div key={i} className="serie-linha">
-          <input
-            className="input crescer"
-            placeholder={series.length > 1 ? `Série da máquina ${inicio + i}` : 'Ex.: NP12345678901'}
-            value={s}
-            onChange={(e) => trocar(i, e.target.value)}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <button type="button" className="btn btn-sm" onClick={() => setLendo(lendo === i ? null : i)}>
-            {lendo === i ? 'Fechar' : '▣ Ler'}
-          </button>
-        </div>
-      ))}
-      {lendo !== null && (
-        <LeitorCodigo
-          onLido={(valor) => {
-            trocar(lendo, valor);
-            setLendo(null);
-          }}
-          onFoto={onFoto}
-          onFechar={() => setLendo(null)}
-        />
-      )}
-      <p className="mini">{dica ?? 'Está na etiqueta atrás da máquina ou na caixa. Pode deixar em branco e completar na ficha depois.'}</p>
-    </div>
-  );
-}
-
-/**
- * Dados da venda: quantas máquinas, qual tabela (obrigatória), qual modelo e
- * os números de série. Com `clienteId`, a tabela e o modelo da proposta aberta
- * já vêm preenchidos — é ela que vira a venda.
+ * Dados da venda: quantas máquinas, qual tabela (obrigatória) e qual modelo.
+ * Com `clienteId`, a tabela e o modelo da proposta aberta já vêm preenchidos
+ * — é ela que vira a venda.
  * `onChange` aceita valor ou função (como um setState).
  */
-export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da venda' }) {
+export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da venda', proposta = false }) {
   const { meta } = useApp();
   const [origem, setOrigem] = useState(null);
 
@@ -119,7 +66,6 @@ export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da ven
           maquinas: Number(atual.maquinas) > 1 ? atual.maquinas : aberta.maquinas || 1,
           taxaOfertada: atual.taxaOfertada || aberta.taxaOfertada || '',
           modelo: atual.modelo || aberta.modelo || '',
-          series: atual.series?.some(Boolean) ? atual.series : aberta.series ?? [],
         }));
       })
       .catch(() => {});
@@ -129,8 +75,6 @@ export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da ven
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId]);
 
-  const n = Math.max(1, Math.min(50, Number(venda.maquinas) || 1));
-  const series = Array.from({ length: n }, (_, i) => venda.series?.[i] ?? '');
   const modelos = Object.entries(meta?.modelosMaquina ?? {});
 
   return (
@@ -144,9 +88,29 @@ export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da ven
         )}
       </div>
 
+      {/* A maquininha vem primeiro: é o que a venda registra */}
+      {modelos.length > 0 && (
+        <div className="campo">
+          <label>{proposta ? 'Maquininha oferecida' : 'Qual maquininha foi vendida? *'}</label>
+          <div className="opcoes">
+            {modelos.map(([chave, label]) => (
+              <button
+                key={chave}
+                type="button"
+                className={`opcao${venda.modelo === chave ? ' ativa' : ''}`}
+                aria-pressed={venda.modelo === chave}
+                onClick={() => onChange({ ...venda, modelo: venda.modelo === chave ? '' : chave })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="form-linha duas">
         <div className="campo">
-          <label htmlFor="vd-maq">Máquinas vendidas</label>
+          <label htmlFor="vd-maq">{proposta ? 'Máquinas' : 'Máquinas vendidas'}</label>
           <input
             id="vd-maq" type="number" min="1" max="50" className="input" value={venda.maquinas}
             onChange={(e) => onChange({ ...venda, maquinas: Number(e.target.value) })}
@@ -165,31 +129,6 @@ export function VendaCampos({ venda, onChange, clienteId, titulo = 'Dados da ven
           </select>
         </div>
       </div>
-
-      {modelos.length > 0 && (
-        <div className="campo">
-          <label>Modelo</label>
-          <div className="opcoes">
-            {modelos.map(([chave, label]) => (
-              <button
-                key={chave}
-                type="button"
-                className={`opcao${venda.modelo === chave ? ' ativa' : ''}`}
-                onClick={() => onChange({ ...venda, modelo: venda.modelo === chave ? '' : chave })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <SeriesCampos
-        series={series}
-        onChange={(lista) => onChange({ ...venda, series: lista })}
-        onFoto={(foto) => onChange({ ...venda, fotoEtiqueta: foto })}
-      />
-      {venda.fotoEtiqueta && <p className="mini">▣ Foto da etiqueta anexada — vai junto com a venda.</p>}
 
       <p className="mini">
         Entra na sua meta do mês quando a máquina for ativada

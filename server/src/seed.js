@@ -296,13 +296,9 @@ for (let d = -45; d <= -5; d++) {
 
 const deals = [];
 
-// Número de série no padrão da etiqueta; de vez em quando falta um, para a
-// ficha mostrar a pendência. Ativação antiga já vem confirmada pela gestão;
-// uma ou outra fica "declarada", esperando o painel do gestor.
-const serieDemo = () => `NP${int(10_000_000, 99_999_999)}${int(100, 999)}`;
+// Ativação antiga já vem confirmada pela gestão; uma ou outra fica
+// "declarada", esperando o painel do gestor.
 const modeloDemo = () => pick(Object.keys(MODELOS_MAQUINA));
-const seriesDemo = (maquinas, vendida) =>
-  !vendida ? [] : Array.from({ length: chance(0.8) ? maquinas : Math.max(0, maquinas - 1) }, serieDemo);
 const ativacaoDemo = (ativado, ativacaoAt, userId) => {
   if (!ativado) return {};
   const confirmada = chance(0.85);
@@ -331,7 +327,6 @@ for (const cli of clients) {
     maquinas,
     taxaOfertada: pick(TABELAS_TAXA),
     modelo: modeloDemo(),
-    series: seriesDemo(maquinas, fechado),
     status: ativado ? 'ativado' : fechado ? 'fechado' : cli.stage === 'negociacao' ? 'negociacao' : 'proposta',
     propostaAt: iso(propostaEm),
     fechamentoAt: fechado ? iso(addDays(propostaEm, int(1, 10))) : null,
@@ -356,7 +351,6 @@ for (const v of vendedores) {
     const maquinas = aberta?.maquinas ?? int(1, 2);
     const venda = {
       maquinas,
-      series: seriesDemo(maquinas, true),
       status: ativado ? 'ativado' : 'fechado',
       fechamentoAt: iso(quando),
       ativacaoAt: ativado ? ativacaoAt : null,
@@ -827,7 +821,7 @@ function venderPara(lead, quando) {
   lead.cadenciaEncerrada = 'fechado';
   deals.push({
     id: id('deal'), clientId: lead.id, userId: lead.ownerId, maquinas: 1, taxaOfertada: pick(TABELAS_TAXA),
-    modelo: modeloDemo(), series: seriesDemo(1, true),
+    modelo: modeloDemo(),
     status: 'fechado', propostaAt: iso(quando), fechamentoAt: iso(quando), ativacaoAt: null,
     notes: '', createdAt: iso(quando),
   });

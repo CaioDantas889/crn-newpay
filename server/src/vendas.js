@@ -1,22 +1,19 @@
 // Venda e ativação da maquininha: a parte do funil que vira faturamento.
 //
 // Um registro por negociação: a proposta aberta é a que vira venda quando o
-// cliente fecha (não nasce outra), a venda guarda modelo e número de série
-// (um por máquina) e a ativação tem data própria, declarada pelo vendedor e
+// cliente fecha (não nasce outra), a venda guarda quantidade, tabela e
+// modelo, e a ativação tem data própria, declarada pelo vendedor e
 // confirmada pela gestão antes de contar na meta e no ranking.
+// Número de série não entra: a operação decidiu que não precisa dele no CRM.
 
 import { find, id, insert, table, update } from './store.js';
 import { isManager } from './auth.js';
 import { ATIVACAO, MODELOS_MAQUINA, STATUS_NEGOCIO, TABELAS_TAXA, ativacaoConta } from './domain.js';
 import { clientCard, userCard } from './serializers.js';
-import { removerArquivo, salvarDataUrl } from './lib/uploads.js';
 import { dateKey, daysBetween, startOfDay } from './lib/dates.js';
 
 export const STATUS_ABERTOS = ['proposta', 'negociacao'];
 export const STATUS_VENDIDOS = ['fechado', 'ativado'];
-
-/** Número de série limpo: maiúsculo, sem espaços, até 40 caracteres */
-export const limparSerie = (v) => String(v ?? '').trim().toUpperCase().replace(/\s+/g, '').slice(0, 40);
 
 /**
  * Normaliza o que chega do app para os campos da venda. Só devolve o que veio
@@ -27,31 +24,24 @@ export function dadosDaVenda(b = {}) {
   if ('maquinas' in b) dados.maquinas = Math.max(1, Math.min(50, Number(b.maquinas) || 1));
   if ('taxaOfertada' in b) dados.taxaOfertada = String(b.taxaOfertada ?? '').trim().slice(0, 40) || null;
   if ('modelo' in b) dados.modelo = MODELOS_MAQUINA[b.modelo] ? b.modelo : null;
-  if ('series' in b) {
-    const lista = Array.isArray(b.series) ? b.series : String(b.series ?? '').split(/[\n,;]/);
-    dados.series = [...new Set(lista.map(limparSerie).filter(Boolean))];
-  }
   if ('notes' in b) dados.notes = String(b.notes ?? '').trim().slice(0, 500);
-  // Foto da etiqueta com o número de série: ajuda a gestão a conferir
-  if ('fotoEtiqueta' in b) {
-    dados.fotoEtiqueta = b.fotoEtiqueta ? salvarDataUrl(b.fotoEtiqueta?.dataUrl ?? b.fotoEtiqueta, 'etiqueta') : null;
-  }
   return dados;
 }
 
 /**
- * O que falta para a venda valer. Tabela de taxa é obrigatória: venda sem
- * tabela é venda sem preço. Número de série pode ficar para depois — fica
- * como pendência na ficha até ser preenchido.
+ * O que falta para a venda valer. Tabela de taxa e modelo da maquininha são
+ * obrigatórios: venda sem tabela é venda sem preço, e sem o modelo ninguém
+ * sabe que máquina o cliente levou. `base` é o negócio que vira a venda (a
+ * proposta aberta): o que ela já tem não precisa ser informado de novo.
  */
 export function faltaNaVenda(venda, base = {}) {
-  const v = { ...base, ...dadosDaVenda(venda ?? {}) };
+  const novos = Object.fromEntries(
+    Object.entries(dadosDaVenda(venda ?? {})).filter(([, valor]) => valor !== null && valor !== undefined && valor !== '')
+  );
+  const v = { ...(base ?? {}), ...novos };
   if (!v.taxaOfertada) return 'Informe a tabela de taxa da venda.';
   if (!TABELAS_TAXA.includes(v.taxaOfertada)) return `Tabela de taxa desconhecida: ${v.taxaOfertada}.`;
-  const maquinas = v.maquinas ?? 1;
-  if ((v.series ?? []).length > maquinas) {
-    return `São ${maquinas} máquina(s) e ${v.series.length} números de série.`;
-  }
+  if (!v.modelo) return 'Informe qual maquininha foi vendida (modelo).';
   return null;
 }
 
@@ -86,7 +76,6 @@ export function fecharVenda(cliente, venda = {}, { userId, agora = new Date(), n
       maquinas: dados.maquinas ?? aberto.maquinas ?? 1,
       taxaOfertada: dados.taxaOfertada ?? aberto.taxaOfertada ?? null,
       modelo: dados.modelo ?? aberto.modelo ?? null,
-      series: dados.series ?? aberto.series ?? [],
       notes: dados.notes || aberto.notes || notes,
       status: 'fechado',
       fechamentoAt: quando,
@@ -102,8 +91,6 @@ export function fecharVenda(cliente, venda = {}, { userId, agora = new Date(), n
     maquinas: dados.maquinas ?? 1,
     taxaOfertada: dados.taxaOfertada ?? null,
     modelo: dados.modelo ?? null,
-    series: dados.series ?? [],
-    fotoEtiqueta: dados.fotoEtiqueta ?? null,
     status: 'fechado',
     propostaAt: quando,
     fechamentoAt: quando,
@@ -132,25 +119,18 @@ export function dataDeAtivacao(valor, negocio = {}, agora = new Date()) {
 }
 
 /**
- * Ativação da máquina, com a data real e o número de série que faltava. O
- * vendedor declara; a gestão confirma — até lá aparece como "ativação
- * declarada" e não soma. Gestor ativando já confirma.
+ * Ativação da máquina, com a data real. O vendedor declara; a gestão confirma
+ * — até lá aparece como "ativação declarada" e não soma. Gestor ativando já
+ * confirma.
  */
-export function ativarVenda(negocio, { user, data, series, agora = new Date() } = {}) {
+export function ativarVenda(negocio, { user, data, agora = new Date() } = {}) {
   const quando = dataDeAtivacao(data, negocio, agora);
   if (quando.erro) return { erro: quando.erro };
-
-  const novas = series !== undefined ? dadosDaVenda({ series }).series : [];
-  const todas = [...new Set([...(negocio.series ?? []), ...novas])];
-  if (todas.length > (negocio.maquinas || 1)) {
-    return { erro: `São ${negocio.maquinas} máquina(s) e ${todas.length} números de série.` };
-  }
 
   const confirma = isManager(user) || !ATIVACAO.exigeConfirmacao;
   const iso = quando.data.toISOString();
   return {
     negocio: update('deals', negocio.id, {
-      series: todas,
       status: 'ativado',
       fechamentoAt: negocio.fechamentoAt ?? iso,
       ativacaoAt: iso,
@@ -190,24 +170,15 @@ export function recusarAtivacao(negocio, user, motivo, agora = new Date()) {
   });
 }
 
-/** Apaga o anexo do negócio ao excluí-lo */
-export function removerAnexosDoNegocio(negocio) {
-  return negocio?.fotoEtiqueta?.url && removerArquivo(negocio.fotoEtiqueta.url) ? 1 : 0;
-}
-
 /** O negócio com o que a interface precisa: rótulos, pendências e idade */
 export function expandirNegocio(d, agora = new Date()) {
-  const series = Array.isArray(d.series) ? d.series : [];
-  const vendida = STATUS_VENDIDOS.includes(d.status);
   const diasSemAtivar =
     d.status === 'fechado' && d.fechamentoAt ? Math.max(0, daysBetween(new Date(d.fechamentoAt), agora)) : null;
 
   return {
     ...d,
-    series,
     modeloLabel: MODELOS_MAQUINA[d.modelo] ?? null,
     statusMeta: STATUS_NEGOCIO[d.status] ?? STATUS_NEGOCIO.proposta,
-    faltamSeries: vendida ? Math.max(0, (d.maquinas || 1) - series.length) : 0,
     ativacaoConfirmada: ativacaoConta(d),
     aguardandoConfirmacao: d.status === 'ativado' && !ativacaoConta(d),
     diasSemAtivar,
@@ -249,7 +220,6 @@ export function pendenciasDeAtivacao(userId, agora = new Date()) {
       semAtivar: semAtivar.length,
       maquinasSemAtivar: maquinas(semAtivar),
       atrasadas: semAtivar.filter((d) => d.ativacaoAtrasada).length,
-      semSerie: semAtivar.filter((d) => d.faltamSeries > 0).length,
       declaradas: declaradas.length,
       maquinasDeclaradas: maquinas(declaradas),
     },

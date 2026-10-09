@@ -8,6 +8,7 @@ import { RESULTADOS_PRODUTIVOS, SEGMENTOS, announcementReachesUser, reachesUser 
 import { faixaDoMes, resumoVendedor } from '../metrics.js';
 import { addDays, dateKey, endOfDay, startOfDay } from '../lib/dates.js';
 import { painelSemaforo, remotosDoDia, trajetoDoDia } from '../semaforo.js';
+import { perfilDoVendedor } from '../perfil.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('gestor', 'diretoria'));
@@ -214,6 +215,25 @@ router.get('/vendedor/:id/trajeto', (req, res) => {
     visitas: trajetoDoDia(vendedor.id, dia),
     remotos: remotosDoDia(vendedor.id, dia),
   });
+});
+
+/**
+ * GET /api/gestor/vendedor/:id/perfil?mes=YYYY-MM&dias=30
+ * A visão geral de um vendedor: mês, hoje, carteira, disciplina, conduta e o
+ * histórico de tudo que ele registrou na janela de `dias` (7 a 90).
+ * Vendedor inativo continua tendo perfil — o histórico dele não some.
+ */
+router.get('/vendedor/:id/perfil', (req, res) => {
+  const vendedor = table('users').find((u) => u.id === req.params.id);
+  if (!vendedor) return res.status(404).json({ error: 'Vendedor não encontrado.' });
+  if (vendedor.role !== 'vendedor') {
+    return res.status(400).json({ error: 'O perfil completo é só de vendedor externo.' });
+  }
+  const mes = req.query.mes;
+  if (mes !== undefined && !(typeof mes === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes))) {
+    return res.status(400).json({ error: 'Mês inválido. Use AAAA-MM.' });
+  }
+  res.json(perfilDoVendedor(vendedor, { mes, dias: req.query.dias }));
 });
 
 /** GET /api/gestor/kpis?dias=7 — disciplina de registro diário da equipe */
