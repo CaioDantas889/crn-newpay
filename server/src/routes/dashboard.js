@@ -63,6 +63,12 @@ router.get('/', (req, res) => {
       calculado: kpiCalculado(userId),
       fechado: Boolean(kpiDeHoje?.fechadoAt),
       registrado: kpiDeHoje ?? null,
+      // O convite para fechar o dia depende do ponto: aberto, leva a encerrar
+      // o expediente junto; encerrado hoje, já pode fechar a qualquer hora
+      expedienteAberto: table('jornadas').some((j) => j.userId === userId && !j.fimAt),
+      expedienteEncerradoHoje: table('jornadas').some(
+        (j) => j.userId === userId && j.fimAt && dateKey(new Date(j.inicioAt)) === hojeChave
+      ),
     },
     proximosCompromissos: proximos,
     clientesQuentes,

@@ -40,7 +40,11 @@ export default function PerfilVendedor() {
   const [filtro, setFiltro] = useState('todos');
 
   const { toast } = useApp();
-  const { dados, carregando, erro } = useRecurso(() => endpoints.perfilVendedor(id, { mes, dias }), [id, mes, dias]);
+  const { dados, carregando, recarregando, erro } = useRecurso(
+    () => endpoints.perfilVendedor(id, { mes, dias }),
+    [id, mes, dias],
+    { manterAoTrocar: true }
+  );
 
   // Falha ao trocar mês ou janela: os números da tela são da escolha anterior
   useEffect(() => {
@@ -75,7 +79,7 @@ export default function PerfilVendedor() {
   const ultimaBatidaHoje = hoje.expediente?.[hoje.expediente.length - 1] ?? null;
 
   return (
-    <div className={`page${carregando ? ' esmaecido' : ''}`}>
+    <div className={`page${carregando || recarregando ? ' esmaecido' : ''}`}>
       {/* ------------------------------------------------------ cabeça */}
       <div className="card card-pad coluna perfil-cabeca">
         <div className="linha" style={{ alignItems: 'flex-start' }}>

@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
-import { Carregando, Modal, Vazio } from '../components/ui.jsx';
+import { CancelarModal, Carregando, Modal, Vazio } from '../components/ui.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
 
 const TIPOS = [
@@ -244,7 +244,7 @@ function FormularioMaterial({ inicial, categorias, onFechar, onSalvo }) {
       onFechar={onFechar}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-primary" onClick={salvar} disabled={salvando || enviando}>
             {enviando ? 'Enviando arquivo...' : salvando ? 'Salvando...' : novo ? 'Publicar' : 'Salvar'}
           </button>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { dateKey, pad } from '../lib/date.js';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 
 const horaLocal = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
 const duracaoMin = (ini, fim) => Math.max(15, Math.round((new Date(fim) - new Date(ini)) / 60000));
@@ -107,7 +107,7 @@ export default function EventoModal({ evento, dataPadrao, ownerId, onFechar, onS
               Excluir
             </button>
           )}
-          <button type="button" className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button type="submit" form="form-evento" className="btn btn-primary" disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar'}
           </button>

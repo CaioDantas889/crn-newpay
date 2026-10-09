@@ -1,18 +1,39 @@
 // Peças reaproveitadas em várias telas.
 
-import { useCallback, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+
+const ModalContexto = createContext(null);
+
+const novoId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 /**
- * `sujo`: o formulário tem algo preenchido. Aí um toque fora, o Esc ou o ✕
- * perguntam antes de fechar — no celular, um toque sem querer acima do
- * formulário apagava o lead inteiro, foto da fachada incluída. O botão
- * "Cancelar" do rodapé continua fechando direto: ali a intenção é clara.
+ * Janela por cima da tela. Três jeitos de fechar sem querer — tocar fora, o
+ * ✕/Esc e o botão voltar do Android — e o "Cancelar" do rodapé perguntam
+ * antes de descartar quando há algo preenchido. Na rua, um toque errado
+ * apagava o lead inteiro, foto da fachada incluída.
+ *
+ * `sujo`: o formulário diz que tem algo preenchido (útil para escolhas por
+ *   botão, que não disparam "input"). Além dele, qualquer digitação dentro do
+ *   modal já conta.
+ *
+ * O voltar do Android: ao abrir, o modal põe uma entrada no histórico; o
+ * voltar consome essa entrada em vez de sair da tela (ou fechar o app
+ * instalado). Fechando por botão, a entrada é retirada.
  */
 export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = false }) {
+  const [mexeu, setMexeu] = useState(false);
+  const idRef = useRef(null);
+  if (!idRef.current) idRef.current = novoId();
+
+  // O fechamento sempre com os valores atuais, sem refazer os efeitos
+  const atual = useRef({ onFechar, precisa: false });
+  atual.current = { onFechar, precisa: Boolean(sujo || mexeu) };
+
   const tentarFechar = useCallback(() => {
-    if (sujo && !window.confirm('Descartar o que você preencheu?')) return;
-    onFechar();
-  }, [sujo, onFechar]);
+    if (atual.current.precisa && !window.confirm('Descartar o que você preencheu?')) return;
+    atual.current.onFechar();
+  }, []);
 
   useEffect(() => {
     const fechaComEsc = (e) => e.key === 'Escape' && tentarFechar();
@@ -24,20 +45,67 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = fa
     };
   }, [tentarFechar]);
 
+  // Voltar do Android
+  const montado = useRef(false);
+  const consumido = useRef(false);
+  useEffect(() => {
+    const id = idRef.current;
+    montado.current = true;
+    if (window.history.state?.modalId !== id) {
+      window.history.pushState({ ...(window.history.state ?? {}), modalId: id }, '');
+    }
+
+    const aoVoltar = (e) => {
+      if (e.state?.modalId === id) return;
+      if (atual.current.precisa && !window.confirm('Descartar o que você preencheu?')) {
+        window.history.pushState({ ...(window.history.state ?? {}), modalId: id }, '');
+        return;
+      }
+      consumido.current = true;
+      atual.current.onFechar();
+    };
+    window.addEventListener('popstate', aoVoltar);
+
+    return () => {
+      window.removeEventListener('popstate', aoVoltar);
+      montado.current = false;
+      // Espera um instante: no modo de desenvolvimento o React desmonta e
+      // monta de novo na hora, e aí a entrada continua sendo deste modal.
+      // Depois de salvar e navegar para outra tela, a entrada de cima já não
+      // é a dele — e não se volta, senão a navegação seria desfeita.
+      setTimeout(() => {
+        if (montado.current || consumido.current) return;
+        if (window.history.state?.modalId === id) window.history.back();
+      }, 0);
+    };
+  }, []);
+
   return (
-    <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && tentarFechar()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={titulo}>
-        <div className="modal-header">
-          <div className="crescer">
-            <h2>{titulo}</h2>
-            {subtitulo && <p className="mini">{subtitulo}</p>}
+    <ModalContexto.Provider value={tentarFechar}>
+      <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && tentarFechar()}>
+        <div className="modal" role="dialog" aria-modal="true" aria-label={titulo}>
+          <div className="modal-header">
+            <div className="crescer">
+              <h2>{titulo}</h2>
+              {subtitulo && <p className="mini">{subtitulo}</p>}
+            </div>
+            <button className="btn btn-ghost btn-icone" onClick={tentarFechar} aria-label="Fechar">✕</button>
           </div>
-          <button className="btn btn-ghost btn-icone" onClick={tentarFechar} aria-label="Fechar">✕</button>
+          <div className="modal-corpo" onInput={() => !mexeu && setMexeu(true)}>{children}</div>
+          {rodape && <div className="modal-rodape">{rodape}</div>}
         </div>
-        <div className="modal-corpo">{children}</div>
-        {rodape && <div className="modal-rodape">{rodape}</div>}
       </div>
-    </div>
+    </ModalContexto.Provider>
+  );
+}
+
+/** "Cancelar" do rodapé: pergunta antes de descartar o que foi preenchido */
+export function CancelarModal({ children = 'Cancelar' }) {
+  const tentarFechar = useContext(ModalContexto);
+  return (
+    <button type="button" className="btn" onClick={() => tentarFechar?.()}>
+      {children}
+    </button>
   );
 }
 

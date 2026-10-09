@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { diaMes, relativo } from '../lib/date.js';
-import { Avatar, Carregando, Modal, Progresso, Vazio } from '../components/ui.jsx';
+import { Avatar, CancelarModal, Carregando, Modal, Progresso, Vazio } from '../components/ui.jsx';
 import ConfirmarExclusao from '../components/ConfirmarExclusao.jsx';
 
 const CATEGORIAS = {
@@ -182,7 +182,7 @@ function NovoComunicado({ onFechar, onCriado }) {
       onFechar={onFechar}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
             {salvando ? 'Publicando...' : 'Publicar'}
           </button>

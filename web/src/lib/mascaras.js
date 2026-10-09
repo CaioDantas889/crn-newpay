@@ -25,9 +25,20 @@ export function mascaraDocumento(valor = '') {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 }
 
+/**
+ * Dígitos do telefone como o CRM guarda: sem 0 de operadora na frente e sem o
+ * 55 do país. É o formato que o WhatsApp copia ("+55 88 99999-0000") — antes
+ * isso virava "(55) 88999-9900", um número que não existe.
+ */
+export function normalizarTelefone(valor = '') {
+  let d = somenteNumeros(valor).replace(/^0+/, '');
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  return d.slice(0, 11);
+}
+
 /** (88) 99999-0000 para celular, (88) 3581-0000 para fixo */
 export function mascaraTelefone(valor = '') {
-  const d = somenteNumeros(valor).slice(0, 11);
+  const d = normalizarTelefone(valor);
   if (d.length <= 2) return d.replace(/^(\d{0,2})/, '($1');
   if (d.length <= 6) return d.replace(/^(\d{2})(\d{0,4})/, '($1) $2');
   if (d.length <= 10) return d.replace(/^(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
@@ -91,8 +102,10 @@ export function validarDocumento(valor = '') {
 
 /** Motivo da recusa do telefone, ou null */
 export function validarTelefone(valor = '') {
-  const d = somenteNumeros(valor);
+  const d = normalizarTelefone(valor);
   if (!d) return null;
   if (d.length < 10) return 'Telefone incompleto — inclua o DDD.';
+  // Celular com 11 dígitos sempre tem 9 logo depois do DDD
+  if (d.length === 11 && d[2] !== '9') return 'Número estranho — confira se colou com +55 ou com 0 na frente.';
   return null;
 }

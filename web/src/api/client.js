@@ -1,4 +1,8 @@
 // Camada única de acesso à API. Guarda o token e normaliza os erros.
+//
+// Feita para o 4G do interior: toda chamada tem prazo, a falta de sinal vira
+// uma mensagem em português que diz o que fazer, e o token se renova sozinho
+// quando o servidor manda um novo (cabeçalho X-Token-Novo).
 
 const TOKEN_KEY = 'newpay.token';
 
@@ -6,41 +10,92 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token) =>
   token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY);
 
-class ApiError extends Error {
-  constructor(message, status) {
+export class ApiError extends Error {
+  constructor(message, status, extra = {}) {
     super(message);
     this.status = status;
+    Object.assign(this, extra);
   }
 }
 
-async function request(path, { method = 'GET', body, auth = true } = {}) {
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(auth && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+/** Falhou por rede (sem sinal ou sem resposta), e não por regra do servidor */
+export const ehErroDeRede = (e) => Boolean(e?.rede);
 
-  if (res.status === 401 && auth) {
-    setToken(null);
-    window.dispatchEvent(new CustomEvent('newpay:sessao-expirada'));
+const PRAZO_LEITURA_MS = 15_000;
+const PRAZO_ENVIO_MS = 45_000; // foto e áudio sobem devagar no 4G
+
+function guardarTokenNovo(res) {
+  const novo = res.headers.get('X-Token-Novo');
+  if (novo) setToken(novo);
+}
+
+/**
+ * `idempotente`: repetir o envio é seguro (o servidor reconhece a chave do
+ * cadastro e devolve o mesmo registro) — a mensagem de falta de resposta pode
+ * mandar tocar em Salvar de novo.
+ */
+async function request(path, { method = 'GET', body, auth = true, timeout, idempotente = false } = {}) {
+  const leitura = method === 'GET';
+  const controle = new AbortController();
+  const prazo = setTimeout(() => controle.abort(), timeout ?? (leitura ? PRAZO_LEITURA_MS : PRAZO_ENVIO_MS));
+
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      signal: controle.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auth && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (erro) {
+    const estourou = erro?.name === 'AbortError';
+    const mensagem = !estourou
+      ? 'Sem sinal agora. Seus dados continuam aqui; tente de novo.'
+      : leitura
+        ? 'A internet está lenta demais. Tente de novo.'
+        : idempotente
+          ? 'Sem resposta do servidor. Seus dados continuam aqui: toque em Salvar de novo.'
+          : 'A conexão caiu antes da resposta. Confira se salvou antes de repetir.';
+    throw new ApiError(mensagem, 0, { rede: true, tempo: estourou });
+  } finally {
+    clearTimeout(prazo);
   }
 
-  const texto = await res.text();
-  const dados = texto ? JSON.parse(texto) : null;
+  guardarTokenNovo(res);
 
-  if (!res.ok) throw new ApiError(dados?.error ?? 'Não foi possível completar a operação.', res.status);
+  let dados = null;
+  let texto = '';
+  try {
+    texto = await res.text();
+    dados = texto ? JSON.parse(texto) : null;
+  } catch {
+    // Portal da operadora, proxy ou 502 devolvem HTML: não é resposta do CRM
+    throw new ApiError('O servidor não respondeu direito. Tente de novo em instantes.', res.ok ? 502 : res.status, {
+      rede: true,
+    });
+  }
+
+  if (res.status === 401 && auth) {
+    const code = dados?.code ?? 'sessao_vencida';
+    // Sessão vencida: o token velho sai, mas a tela continua montada e só pede
+    // a senha de novo. Senha trocada ou usuário sem acesso: sai de vez.
+    setToken(null);
+    window.dispatchEvent(new CustomEvent('newpay:sessao-expirada', { detail: { code } }));
+  }
+
+  if (!res.ok) throw new ApiError(dados?.error ?? 'Não foi possível completar a operação.', res.status, { code: dados?.code });
   return dados;
 }
 
 export const api = {
-  get: (path) => request(path),
+  get: (path, opts) => request(path, opts),
   post: (path, body, opts) => request(path, { method: 'POST', body, ...opts }),
-  put: (path, body) => request(path, { method: 'PUT', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
-  del: (path) => request(path, { method: 'DELETE' }),
+  put: (path, body, opts) => request(path, { method: 'PUT', body, ...opts }),
+  patch: (path, body, opts) => request(path, { method: 'PATCH', body, ...opts }),
+  del: (path, opts) => request(path, { method: 'DELETE', ...opts }),
 };
 
 const qs = (params = {}) => {
@@ -53,9 +108,9 @@ const qs = (params = {}) => {
 export const endpoints = {
   // sessão e vocabulário
   login: (email, password) => api.post('/auth/login', { email, password }, { auth: false }),
-  me: () => api.get('/auth/me'),
+  me: (opts) => api.get('/auth/me', opts),
   equipe: () => api.get('/auth/equipe'),
-  meta: () => api.get('/meta'),
+  meta: (opts) => api.get('/meta', opts),
   trocarSenha: (atual, nova) => api.post('/auth/senha', { atual, nova }),
 
   // cadastro da equipe (gestor)
@@ -90,7 +145,7 @@ export const endpoints = {
   clientes: (params) => api.get(`/clients${qs(params)}`),
   sugestoesDoDia: (data, userId) => api.get(`/clients/sugestoes${qs({ data, userId })}`),
   cliente: (id) => api.get(`/clients/${id}`),
-  criarCliente: (dados) => api.post('/clients', dados),
+  criarCliente: (dados) => api.post('/clients', dados, { idempotente: true }),
   atualizarCliente: (id, patch) => api.patch(`/clients/${id}`, patch),
   salvarDiagnostico: (id, dados) => api.put(`/clients/${id}/diagnostico`, dados),
   funil: (userId) => api.get(`/clients/funil${qs({ userId })}`),
@@ -102,7 +157,7 @@ export const endpoints = {
 
   // lead com prova: duplicado, CNPJ na Receita, print e abertura do WhatsApp
   checarDuplicado: (params) => api.get(`/clients/checar${qs(params)}`),
-  consultarCnpj: (cnpj) => api.get(`/clients/cnpj/${String(cnpj).replace(/D/g, '')}`),
+  consultarCnpj: (cnpj) => api.get(`/clients/cnpj/${String(cnpj).replace(/\D/g, '')}`),
   enviarPrint: (id, print) => api.post(`/clients/${id}/print`, { print }),
   recusarPrint: (id, motivo) => api.post(`/clients/${id}/recusar-print`, { motivo }),
   registrarWhatsApp: (id, followupId) => api.post(`/clients/${id}/whatsapp`, { followupId }),
@@ -115,7 +170,7 @@ export const endpoints = {
 
   // visitas e vendas
   visitas: (params) => api.get(`/visits${qs(params)}`),
-  registrarVisita: (dados) => api.post('/visits', dados),
+  registrarVisita: (dados) => api.post('/visits', dados, { idempotente: true }),
   excluirVisita: (id) => api.del(`/visits/${id}`),
   negocios: (params) => api.get(`/deals${qs(params)}`),
   criarNegocio: (dados) => api.post('/deals', dados),
@@ -147,6 +202,8 @@ export const endpoints = {
       },
       body: arquivo,
     });
+    const novo = res.headers.get('X-Token-Novo');
+    if (novo) setToken(novo);
     const dados = await res.json().catch(() => null);
     if (!res.ok) throw new ApiError(dados?.error ?? 'Não consegui enviar o arquivo.', res.status);
     return dados;

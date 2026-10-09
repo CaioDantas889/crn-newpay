@@ -2,7 +2,7 @@
 // O vendedor vê a própria carteira. A gestão vê a equipe inteira e filtra por
 // vendedor — é daqui que ela acompanha cliente e visita de todo mundo.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
@@ -31,7 +31,13 @@ export default function Carteira() {
   const [params, setParams] = useSearchParams();
 
   const [aba, setAba] = useState(params.get('aba') ?? 'lista');
+  const [buscaDigitada, setBuscaDigitada] = useState('');
   const [busca, setBusca] = useState('');
+  // Uma busca por pausa na digitação, não por letra (no 4G cada letra era uma ida)
+  useEffect(() => {
+    const t = setTimeout(() => setBusca(buscaDigitada.trim()), 250);
+    return () => clearTimeout(t);
+  }, [buscaDigitada]);
   const [temperatura, setTemperatura] = useState(params.get('temperatura') ?? '');
   const [stage, setStage] = useState(params.get('stage') ?? '');
   const [ordem, setOrdem] = useState(params.get('ordem') ?? 'score');
@@ -45,9 +51,10 @@ export default function Carteira() {
   );
 
   const userId = ehGestor && vendedor ? vendedor : undefined;
-  const { dados: clientes, carregando, recarregar } = useRecurso(
+  const { dados: clientes, carregando, recarregando, recarregar } = useRecurso(
     () => endpoints.clientes({ busca, temperatura, stage, ordem, userId }),
-    [busca, temperatura, stage, ordem, userId]
+    [busca, temperatura, stage, ordem, userId],
+    { manterAoTrocar: true }
   );
   const { dados: funil } = useRecurso(() => endpoints.funil(userId), [aba === 'funil', userId]);
 
@@ -130,8 +137,8 @@ export default function Carteira() {
               <input
                 className="input"
                 placeholder="Buscar por empresa, responsável, cidade ou telefone..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
+                value={buscaDigitada}
+                onChange={(e) => setBuscaDigitada(e.target.value)}
               />
               <div className="opcoes">
                 {['', 'quente', 'morno', 'frio'].map((t) => (
@@ -175,7 +182,8 @@ export default function Carteira() {
               </div>
             </div>
 
-            {carregando ? (
+            {recarregando && <p className="mini card-pad" style={{ paddingBottom: 0 }}>Buscando...</p>}
+            {carregando && !clientes ? (
               <Carregando linhas={6} />
             ) : lista.length === 0 ? (
               <Vazio

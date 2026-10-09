@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { addDays, dateKey, diaExtenso } from '../lib/date.js';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 
 const PRESETS = [
   { chave: 'amanha', rotulo: 'Amanhã', dias: 1 },
@@ -52,7 +52,7 @@ export default function AgendarRetorno({ cliente, onFechar, onAgendado }) {
       onFechar={onFechar}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-primary" onClick={agendar} disabled={salvando}>
             {salvando ? 'Agendando...' : 'Agendar na agenda'}
           </button>

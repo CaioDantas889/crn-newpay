@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { CORES_TEMPERATURA, calcularScoreLocal } from '../lib/score.js';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 
 export default function DiagnosticoModal({ cliente, onFechar, onSalvo }) {
   const { meta, toast } = useApp();
@@ -63,7 +63,7 @@ export default function DiagnosticoModal({ cliente, onFechar, onSalvo }) {
       onFechar={onFechar}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar diagnóstico'}
           </button>

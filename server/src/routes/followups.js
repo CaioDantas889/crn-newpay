@@ -103,11 +103,9 @@ router.post('/:id/concluir', async (req, res, next) => {
     const lng = Number(b.lng);
     const comGps = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
 
-    if (revisita && !comGps) {
-      return res.status(400).json({
-        error: 'Revisita se registra no local: ligue a localização do aparelho e tente de novo.',
-      });
-    }
+    // Revisita sem GPS (dentro da loja, 4G fraco) salva igual ao "Visitei":
+    // marcada "sem GPS", e a gestão recebe o alerta. Antes ela travava aqui e
+    // o vendedor ficava parado na frente do lojista.
 
     const exigePrint = cliente.origem === 'remoto' && !revisita;
     const print = b.print ? salvarPrint(b.print, cliente.id, agora) : null;
@@ -131,10 +129,10 @@ router.post('/:id/concluir', async (req, res, next) => {
         notes: b.notes ?? '',
         fotos: salvarVarios(b.fotos, `visita_${cliente.id}`),
         audio: null,
-        lat,
-        lng,
-        precisao: Number.isFinite(Number(b.precisao)) ? Math.round(Number(b.precisao)) : null,
-        semGps: false,
+        lat: comGps ? lat : null,
+        lng: comGps ? lng : null,
+        precisao: comGps && Number.isFinite(Number(b.precisao)) ? Math.round(Number(b.precisao)) : null,
+        semGps: !comGps,
         duracaoMin: null,
         eventId: null,
       });

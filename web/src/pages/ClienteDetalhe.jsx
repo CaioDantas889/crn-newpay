@@ -75,8 +75,9 @@ export default function ClienteDetalhe() {
 
   // Print com a resposta do lojista: é o que tira o remoto do "pendente"
   const enviarPrint = async () => {
-    if (!print?.comResposta) {
-      return toast('Marque que o print mostra a data e a resposta do lojista.', 'erro');
+    if (print?.comResposta == null) return toast('Diga se o print tem a resposta do lojista.', 'erro');
+    if (!print.comResposta) {
+      return toast('Sem a resposta do lojista, o print não valida o lead. Envie quando ele responder.', 'erro');
     }
     setEnviandoPrint(true);
     try {

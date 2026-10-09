@@ -19,7 +19,7 @@ import { removerAnexosDaVisita, removerArquivo, salvarDataUrl } from '../lib/upl
 import { addDays, atHour, dateKey, daysBetween, endOfDay, startOfDay } from '../lib/dates.js';
 import { cnpjValido, consultarCnpj, formatarCnpj, motivoRecusaCnpj } from '../lib/cnpj.js';
 import {
-  buscarDuplicado, ehLead, motivoDoStatus, placarDoDia, soDigitos, statusDoLead, statusMeta, telefoneChave,
+  buscarDuplicado, ehLead, motivoDoStatus, placarDoDia, soDigitos, statusDoLead, statusMeta, telefoneChave, telefoneValido,
   tentarValidar,
 } from '../leads.js';
 import {
@@ -463,6 +463,9 @@ router.post('/', async (req, res, next) => {
 
     if (!nome) faltando.push('nome do dono');
     if (!telefoneChave(whatsapp)) faltando.push('WhatsApp com DDD');
+    else if (!telefoneValido(whatsapp)) {
+      return res.status(400).json({ error: 'WhatsApp estranho — confira se colou com +55 ou com 0 na frente.' });
+    }
 
     /* -------------------------------------------- o que cada tipo exige */
     // Lead que já fechou no cadastro: a venda precisa da tabela de taxa

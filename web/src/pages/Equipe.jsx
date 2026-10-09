@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { mascaraTelefone } from '../lib/mascaras.js';
-import { Avatar, Carregando, Modal, Vazio } from '../components/ui.jsx';
+import { Avatar, CancelarModal, Carregando, Modal, Vazio } from '../components/ui.jsx';
 import TrocarSenha from '../components/TrocarSenha.jsx';
 
 const PAPEIS = {
@@ -218,7 +218,7 @@ function FormularioUsuario({ inicial, onFechar, onSalvo }) {
       onFechar={onFechar}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
             {salvando ? 'Salvando...' : novo ? 'Cadastrar' : 'Salvar'}
           </button>

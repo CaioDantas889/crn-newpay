@@ -51,6 +51,8 @@ const equipeAtiva = (await api('/api/auth/equipe', { token: gestor })).json ?? [
 const totalVendedores = equipeAtiva.filter((u) => u.role === 'vendedor').length;
 
 ok((await api('/api/events')).status === 401, 'rota protegida sem token devolve 401');
+const tokenVelho = await api('/api/events', { token: 'abc.def' });
+ok(tokenVelho.status === 401 && tokenVelho.json?.code === 'sessao_vencida', 'sessão vencida diz o motivo (o app só pede a senha de novo)', tokenVelho.json?.code);
 
 const meta = await api('/api/meta', { token: vendedor });
 ok(Object.keys(meta.json?.segmentos ?? {}).length === 10, 'vocabulário traz os 10 segmentos');
@@ -74,6 +76,10 @@ secao('Dashboard do vendedor');
 
 const dash = await api('/api/dashboard', { token: vendedor });
 ok(dash.status === 200, 'GET /api/dashboard');
+ok(
+  typeof dash.json?.kpiHoje?.expedienteAberto === 'boolean' && typeof dash.json?.kpiHoje?.expedienteEncerradoHoje === 'boolean',
+  'tela Hoje sabe se o expediente está aberto (convite para fechar o dia na hora certa)'
+);
 ok(dash.json?.resumo?.meta?.metaMaquinas > 0, 'meta do mês definida', `${dash.json?.resumo?.meta?.metaMaquinas} máquinas`);
 // Vendedor externo da NewPay e salario fixo: o CRM nao calcula comissao
 ok(dash.json?.resumo?.comissao === undefined, 'dashboard nao devolve comissao');
@@ -120,6 +126,7 @@ for (const c of (await api('/api/clients?userId=todos', { token: gestor })).json
 }
 
 /** Lead presencial completo: GPS do aparelho, foto da fachada e resultado */
+// (o número copiado do WhatsApp com +55 vira o mesmo número)
 const leadPresencial = (extra = {}) => ({
   origem: 'presencial', name: 'Cliente Teste', company: 'Mercadinho Teste', whatsapp: FONE_TESTE,
   segment: 'mercadinho', maquinaAtual: 'ton', faturamentoCartao: '5k_10k', resultado: 'frio',
@@ -147,6 +154,16 @@ ok(
   `Hoje: ${novo.json?.placar?.total}/${novo.json?.placar?.meta}`
 );
 ok(novo.json?.followup?.passo?.etapa === 'd1', 'lead que nao fechou ja nasce com o follow-up D+1', novo.json?.followup?.dueAt?.slice(0, 10));
+
+// Número colado do WhatsApp: "+55 ..." é o mesmo número; "(55) 88999-9900" é número quebrado
+ok(
+  (await api(`/api/clients/checar?whatsapp=${encodeURIComponent('+55 88 96111-0001')}`, { token: vendedor })).json?.duplicado === true,
+  'número colado com +55 é reconhecido como o mesmo telefone'
+);
+const foneQuebrado = await api('/api/clients', {
+  token: vendedor, method: 'POST', body: leadPresencial({ whatsapp: '(55) 88999-9900', company: 'Fone quebrado' }),
+});
+ok(foneQuebrado.status === 400 && /estranho/i.test(foneQuebrado.json?.error ?? ''), 'WhatsApp colado errado (+55 virou DDD) é recusado', foneQuebrado.json?.error);
 
 const repetido = await api('/api/clients', { token: vendedor, method: 'POST', body: leadPresencial({ company: 'Outro nome' }) });
 ok(repetido.status === 409 && repetido.json?.duplicado, 'telefone ja cadastrado e bloqueado como duplicado', repetido.json?.error);
@@ -279,6 +296,38 @@ ok(visitaFechada.json?.cliente?.stage === 'fechado', 'cliente vai para "fechado"
 
 const visitasDoCliente = await api(`/api/visits?clientId=${alvo.id}`, { token: vendedor });
 ok(visitasDoCliente.json?.length >= 2, 'histórico de visitas do cliente', `${visitasDoCliente.json?.length} registros`);
+
+// Reenvio da mesma visita (4G caiu depois de gravar): volta a mesma, sem duplicar
+const chaveVisita = `smoke-${Date.now()}`;
+const visitaChave1 = await api('/api/visits', {
+  token: vendedor, method: 'POST', body: { chave: chaveVisita, clientId: alvo.id, resultado: 'morno', notes: 'chave', lat: -6.36, lng: -39.3 },
+});
+const visitaChave2 = await api('/api/visits', {
+  token: vendedor, method: 'POST', body: { chave: chaveVisita, clientId: alvo.id, resultado: 'morno', notes: 'chave', lat: -6.36, lng: -39.3 },
+});
+ok(
+  visitaChave1.status === 201 && visitaChave2.status === 200 && visitaChave2.json?.repetido === true &&
+    visitaChave2.json?.visita?.id === visitaChave1.json?.visita?.id,
+  'repetir o Salvar da visita devolve a mesma visita (não grava outra)'
+);
+
+// Revisita pelo cartão do follow-up sem GPS: salva marcada, igual ao "Visitei"
+// A revisita pendente pode vencer em outro dia: procura na ficha dos clientes
+let revisitaPendente = null;
+for (const c of clientes.json.slice(0, 80)) {
+  const ficha = (await api(`/api/clients/${c.id}`, { token: vendedor })).json;
+  revisitaPendente = ficha?.followups?.find((x) => x.status === 'pendente' && x.acao === 'revisita') ?? null;
+  if (revisitaPendente) break;
+}
+if (revisitaPendente) {
+  const semGps = await api(`/api/followups/${revisitaPendente.id}/concluir`, {
+    token: vendedor, method: 'POST', body: { resultado: 'morno', notes: 'dentro da loja, sem sinal' },
+  });
+  const visitaSemGps = (await api(`/api/visits?clientId=${revisitaPendente.clientId ?? revisitaPendente.client?.id}`, { token: vendedor })).json?.[0];
+  ok(semGps.status === 200 && visitaSemGps?.semGps === true, 'revisita do follow-up sem GPS salva marcada "sem GPS" para a gestão');
+} else {
+  ok(true, 'revisita do follow-up sem GPS', 'nenhuma revisita pendente no banco de teste (pulado)');
+}
 
 /* ----------------------------------------------------- propostas e vendas */
 secao('Propostas, vendas e ativações');

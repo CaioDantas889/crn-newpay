@@ -79,20 +79,35 @@ export const publicUser = (user) => {
   return rest;
 };
 
-/** Middleware: exige token valido e injeta req.user */
+// Faltando menos que isso para a sessão vencer, a resposta já leva um token
+// novo (cabeçalho X-Token-Novo): quem usa o app todo dia não é derrubado no
+// meio de um cadastro porque completou 30 dias de login.
+const RENOVAR_ANTES_MS = 7 * 24 * 3600_000;
+
+/**
+ * Middleware: exige token valido e injeta req.user. Cada 401 diz o motivo em
+ * `code`, para a tela saber se pode só pedir a senha de novo (sessao_vencida)
+ * ou se tem de sair de vez (usuario_invalido, senha_mudou).
+ */
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const payload = readToken(header.replace(/^Bearer /i, ''));
-  if (!payload) return res.status(401).json({ error: 'Sessao expirada. Faca login novamente.' });
+  if (!payload) {
+    return res.status(401).json({ error: 'Sua sessão expirou. Entre novamente.', code: 'sessao_vencida' });
+  }
 
   const user = table('users').find((u) => u.id === payload.sub);
-  if (!user || user.active === false) return res.status(401).json({ error: 'Usuario invalido.' });
+  if (!user || user.active === false) {
+    return res.status(401).json({ error: 'Usuário sem acesso.', code: 'usuario_invalido' });
+  }
 
   // Sessao aberta antes da ultima troca de senha nao vale mais: e assim que um
   // celular perdido perde o acesso sem precisar esperar a sessao vencer.
   if ((Number(payload.pv) || 0) !== senhaVersao(user)) {
-    return res.status(401).json({ error: 'Sua senha mudou. Entre novamente.' });
+    return res.status(401).json({ error: 'Sua senha mudou. Entre novamente.', code: 'senha_mudou' });
   }
+
+  if (payload.exp - Date.now() < RENOVAR_ANTES_MS) res.set('X-Token-Novo', createToken(user));
 
   req.user = user;
   next();

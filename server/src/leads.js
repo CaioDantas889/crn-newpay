@@ -208,11 +208,19 @@ export function sequenciaMetaCompleta(userId, agora = new Date(), limiteDias = 9
 
 export const soDigitos = (valor = '') => String(valor ?? '').replace(/\D/g, '');
 
-/** Telefone sem o 55 da frente, para "(88) 99999-0000" e "5588999990000" baterem */
+/** Telefone sem 0 de operadora e sem o 55 da frente, para "(88) 99999-0000" e "+55 88 99999-0000" baterem */
 export function telefoneChave(valor) {
-  let d = soDigitos(valor);
+  let d = soDigitos(valor).replace(/^0+/, '');
   if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
   return d.length >= 10 ? d : '';
+}
+
+/** 10 ou 11 dígitos com DDD; com 11, o 9 do celular logo depois do DDD */
+export function telefoneValido(valor) {
+  const d = telefoneChave(valor);
+  if (d.length !== 10 && d.length !== 11) return false;
+  if (d[0] === '0') return false;
+  return d.length === 10 || d[2] === '9';
 }
 
 /**

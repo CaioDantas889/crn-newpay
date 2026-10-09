@@ -80,6 +80,19 @@ router.post('/', (req, res) => {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
   }
 
+  // Reenvio da mesma visita (o 4G caiu depois de o servidor gravar): devolve a
+  // que já está salva, sem gravar outra visita, concluir follow-up ou fechar
+  // outra venda
+  const chave = typeof b.chave === 'string' ? b.chave.slice(0, 64) : '';
+  if (chave) {
+    const jaSalva = table('visits').find((v) => v.chave === chave && v.userId === req.user.id);
+    if (jaSalva) {
+      return res.status(200).json({
+        visita: expandir(jaSalva), retorno: null, negocio: null, cliente: find('clients', cliente.id), avisos: [], repetido: true,
+      });
+    }
+  }
+
   // App aberto numa versão anterior ainda manda os nomes antigos
   const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
   if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
@@ -129,6 +142,7 @@ router.post('/', (req, res) => {
     semGps: !comGps,
     duracaoMin: Number(b.duracaoMin) || null,
     eventId: b.eventId ?? null,
+    chave: chave || null,
   });
 
   // Fecha o compromisso da agenda, quando a visita veio de um agendamento

@@ -27,7 +27,9 @@ export default function FecharDiaForm({
 }) {
   const { meta, toast } = useApp();
   const navigate = useNavigate();
-  const { dados, recarregar, setDados } = useRecurso(() => endpoints.kpi(data), [data, versao]);
+  const { dados, recarregar, setDados } = useRecurso(() => endpoints.kpi(data), [data, versao], {
+    manterAoTrocar: modo === 'atalho',
+  });
   const [valores, setValores] = useState(null);
   const [editado, setEditado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -84,19 +86,57 @@ export default function FecharDiaForm({
   const formatar = (k, origem) => (k.moeda ? moeda(origem[k.chave]) : origem[k.chave]);
   const resumo = (origem) => campos.map((k) => `${formatar(k, origem)} ${k.unidade ?? k.label.toLowerCase()}`).join(' · ');
 
+  // O que o CRM registrou depois do fechamento (o painel do gestor não vê)
+  const novos = dados.fechado
+    ? campos
+        .map((k) => ({ k, n: (dados.calculado[k.chave] ?? 0) - (dados.registrado?.[k.chave] ?? 0) }))
+        .filter(({ n }) => n > 0)
+    : [];
+  const atualizarFechamento = async () => {
+    setSalvando(true);
+    try {
+      // O maior dos dois: não desfaz uma correção que o vendedor fez para cima
+      const valoresNovos = Object.fromEntries(
+        campos.map((k) => [k.chave, Math.max(dados.registrado?.[k.chave] ?? 0, dados.calculado[k.chave] ?? 0)])
+      );
+      const { registro, calculado } = await endpoints.fecharDia({ data, ...valoresNovos });
+      setEditado(false);
+      setDados((atual) => ({ ...(atual ?? {}), registrado: registro, calculado, fechado: true }));
+      toast('Fechamento atualizado. O painel do gestor já tem os números novos.');
+      onFechado?.();
+    } catch (err) {
+      toast(err.message, 'erro');
+    } finally {
+      setSalvando(false);
+    }
+  };
+  const avisoNovos = novos.length > 0 && (
+    <div className="linha" style={{ flexWrap: 'wrap' }}>
+      <span className="mini crescer">
+        O CRM registrou {novos.map(({ k, n }) => `+${n} ${k.unidade ?? k.label.toLowerCase()}`).join(' · ')} depois do fechamento.
+      </span>
+      <button type="button" className="btn btn-sm btn-brand" onClick={atualizarFechamento} disabled={salvando}>
+        {salvando ? 'Atualizando...' : 'Atualizar'}
+      </button>
+    </div>
+  );
+
   // Linha do atalho: a situação do dia e um toque para abrir
   if (atalho && (dados.fechado || !expandido)) {
     if (dados.fechado) {
       return (
-        <div className="card card-pad entre">
-          <span className="linha mini" style={{ flexWrap: 'wrap' }}>
-            <span className="chip chip-ok">✓ Dia fechado</span>
-            <span>
-              {dados.registrado?.fechadoAt ? `às ${hora(dados.registrado.fechadoAt)} · ` : ''}
-              {resumo(dados.registrado ?? dados.calculado)}
+        <div className="card card-pad coluna" style={{ gap: 8 }}>
+          <div className="entre">
+            <span className="linha mini" style={{ flexWrap: 'wrap' }}>
+              <span className="chip chip-ok">✓ Dia fechado</span>
+              <span>
+                {dados.registrado?.fechadoAt ? `às ${hora(dados.registrado.fechadoAt)} · ` : ''}
+                {resumo(dados.registrado ?? dados.calculado)}
+              </span>
             </span>
-          </span>
-          <button className="btn btn-sm" onClick={() => navigate('/fechar-dia')}>Corrigir</button>
+            <button className="btn btn-sm" onClick={() => navigate('/fechar-dia')}>Corrigir</button>
+          </div>
+          {avisoNovos}
         </div>
       );
     }
@@ -141,6 +181,8 @@ export default function FecharDiaForm({
           <button className="btn btn-ghost btn-sm" onClick={() => setExpandido(false)}>Depois</button>
         )}
       </div>
+
+      {avisoNovos && <div className="card-pad" style={{ paddingBottom: 0 }}>{avisoNovos}</div>}
 
       <div className="card-pad">
         {campos.map((k) => {

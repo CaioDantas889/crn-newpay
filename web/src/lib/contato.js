@@ -3,11 +3,12 @@
 
 const digitos = (v = '') => String(v ?? '').replace(/\D/g, '');
 
-/** wa.me precisa do número com o 55 na frente */
+/** wa.me precisa do número com o 55 na frente (e sem 0 de operadora) */
 export function linkWhatsApp(telefone, texto = '') {
-  let d = digitos(telefone);
+  let d = digitos(telefone).replace(/^0+/, '');
   if (!d) return null;
-  if (!(d.length > 11 && d.startsWith('55'))) d = `55${d}`;
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  d = `55${d}`;
   return `https://wa.me/${d}${texto ? `?text=${encodeURIComponent(texto)}` : ''}`;
 }
 

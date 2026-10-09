@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useApp } from './state/app.jsx';
 import AppShell from './components/AppShell.jsx';
@@ -24,18 +25,40 @@ import AceiteTermo from './components/AceiteTermo.jsx';
 import { TrocaObrigatoria } from './components/TrocarSenha.jsx';
 
 export default function App() {
-  const { user, carregando, ehGestor, ehOnboarding, toasts } = useApp();
+  const { user, carregando, ehGestor, ehOnboarding, toasts, fecharToast, semConexao, abrirSessao, reentrada } = useApp();
 
+  // Toque no aviso fecha: o de erro fica 8 s, e às vezes cobre o botão
   const avisosFlutuantes = (
     <div className="toasts">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast${t.tipo === 'erro' ? ' erro' : ''}`}>
+        <div
+          key={t.id}
+          className={`toast${t.tipo === 'erro' ? ' erro' : ''}`}
+          role={t.tipo === 'erro' ? 'alert' : 'status'}
+          onClick={() => fecharToast(t.id)}
+        >
           <span>{t.tipo === 'erro' ? '⚠︎' : '✓'}</span>
           <span>{t.mensagem}</span>
         </div>
       ))}
     </div>
   );
+
+  // Abriu sem sinal: a sessão continua guardada, só falta a internet
+  if (semConexao && !user) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--preto)', color: '#fff', padding: 24 }}>
+        <div className="centro coluna" style={{ alignItems: 'center', gap: 12 }}>
+          <div className="logo-npb sobre-preto" role="img" aria-label="NewPay Bank" style={{ width: 132, height: 93 }} />
+          <p style={{ color: '#e6e9ec', fontWeight: 650 }}>Sem internet agora.</p>
+          <p className="mini" style={{ color: '#aeb8c2', maxWidth: 280 }}>
+            O CRM abre sozinho quando o sinal voltar. Você continua conectado.
+          </p>
+          <button className="btn btn-brand" onClick={abrirSessao}>Tentar agora</button>
+        </div>
+      </div>
+    );
+  }
 
   if (carregando) {
     return (
@@ -131,6 +154,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      {reentrada && <Reentrada />}
       {avisosFlutuantes}
     </>
   );
@@ -140,4 +164,53 @@ export default function App() {
 function RedirecionaCliente() {
   const id = window.location.pathname.split('/').pop();
   return <Navigate to={`/carteira/${id}`} replace />;
+}
+
+/**
+ * A sessão venceu com o vendedor no meio do trabalho. Em vez de voltar ao
+ * login (e jogar fora o lead ou a visita aberta), pede só a senha por cima de
+ * tudo. Não fecha tocando fora: sem senha, nada salva.
+ */
+function Reentrada() {
+  const { user, reentrar, toast } = useApp();
+  const [senha, setSenha] = useState('');
+  const [entrando, setEntrando] = useState(false);
+
+  const enviar = async (e) => {
+    e.preventDefault();
+    if (!senha) return;
+    setEntrando(true);
+    try {
+      await reentrar(senha);
+    } catch (erro) {
+      toast(erro.message, 'erro');
+    } finally {
+      setEntrando(false);
+    }
+  };
+
+  return (
+    <div className="modal-fundo reentrada" role="dialog" aria-modal="true" aria-label="Entrar de novo">
+      <form className="modal card-pad coluna" onSubmit={enviar}>
+        <h2>Sua sessão expirou</h2>
+        <p className="mini">
+          Entre de novo para continuar. O que está aberto na tela não foi perdido.
+        </p>
+        <div className="campo">
+          <label htmlFor="re-email">E-mail</label>
+          <input id="re-email" className="input" value={user?.email ?? ''} readOnly />
+        </div>
+        <div className="campo">
+          <label htmlFor="re-senha">Senha</label>
+          <input
+            id="re-senha" className="input" type="password" autoComplete="current-password" autoFocus
+            value={senha} onChange={(e) => setSenha(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-brand btn-block" type="submit" disabled={entrando || !senha}>
+          {entrando ? 'Entrando...' : 'Entrar'}
+        </button>
+      </form>
+    </div>
+  );
 }

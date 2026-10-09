@@ -424,8 +424,9 @@ ul { margin: 0; padding: 0; list-style: none; }
 }
 .modal-header { position: sticky; top: 0; background: var(--surface); display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
 .modal-corpo { padding: 12px; display: flex; flex-direction: column; gap: 11px; }
-.modal-rodape { position: sticky; bottom: 0; background: var(--surface); display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.modal-rodape { position: sticky; bottom: 0; background: var(--surface); display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
 .modal-rodape .btn { flex: 1; }
+.rodape-status { flex-basis: 100%; color: var(--text-2); }
 @media (min-width: 620px) {
   .modal-fundo { align-items: center; padding: 16px; }
   .modal { border-radius: 14px; }
@@ -470,3 +471,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 .progresso { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
 .progresso > span { display: block; height: 100%; background: var(--brand); border-radius: 99px; transition: width 0.4s ease; }
+
+/* Sessão vencida: o painel de senha fica por cima de qualquer formulário aberto */
+.modal-fundo.reentrada { z-index: 80; align-items: center; padding: 16px; }
+.modal-fundo.reentrada .modal { border-radius: 14px; gap: 10px; }
+.toast { cursor: pointer; }

@@ -10,7 +10,7 @@ import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { cnpjValido, mascaraDocumento, mascaraTelefone, somenteNumeros, validarTelefone } from '../lib/mascaras.js';
 import { isoDoInput } from '../lib/contato.js';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 import CameraFoto from './CameraFoto.jsx';
 import {
   LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, useLocalAgora,
@@ -31,7 +31,8 @@ export default function NovoLead({ onFechar, onCriado }) {
   const [venda, setVenda] = useState(VENDA_VAZIA);
   const [proximoEm, setProximoEm] = useState('');
   const [duplicado, setDuplicado] = useState(null);
-  const [receita, setReceita] = useState(null); // { carregando } | { erro } | consulta
+  const [receita, setReceita] = useState(null); // { carregando } | { erro } | { semRede } | consulta
+  const [tentativaCnpj, setTentativaCnpj] = useState(0);
   const [indicacoes, setIndicacoes] = useState([]);
   const [buscaIndicacao, setBuscaIndicacao] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -50,7 +51,7 @@ export default function NovoLead({ onFechar, onCriado }) {
 
   // Duplicado avisado enquanto o vendedor ainda está no telefone — antes da foto
   useEffect(() => {
-    if (somenteNumeros(form.whatsapp).length < 10) return setDuplicado(null);
+    if (somenteNumeros(form.whatsapp).length < 10 || validarTelefone(form.whatsapp)) return setDuplicado(null);
     const t = setTimeout(() => {
       endpoints
         .checarDuplicado({ whatsapp: form.whatsapp })
@@ -79,22 +80,36 @@ export default function NovoLead({ onFechar, onCriado }) {
         // A Receita preenche o que o vendedor ainda não digitou
         if (r.ok) setForm((f) => ({ ...f, company: f.company || r.nomeFantasia || r.razaoSocial }));
       })
-      .catch((e) => setReceita({ erro: e.message }));
+      .catch((e) => {
+        // CNPJ recusado de verdade (inválido, baixado, já na base) bloqueia.
+        // Falta de sinal ou Receita fora do ar não: o lead salva pendente e o
+        // servidor confere depois.
+        if ([400, 409, 422].includes(e.status)) return setReceita({ erro: e.message });
+        consultado.current = '';
+        setReceita({ semRede: true });
+      });
     return undefined;
-  }, [form.cnpj, presencial]);
+  }, [form.cnpj, presencial, tentativaCnpj]);
 
   // Quem indicou: busca entre os clientes já cadastrados
   useEffect(() => {
     if (form.canal !== 'indicacao') return undefined;
+    let valido = true;
     const t = setTimeout(() => {
-      endpoints.clientes({ busca: buscaIndicacao, ordem: 'nome' }).then((l) => setIndicacoes(l.slice(0, 6))).catch(() => {});
+      endpoints
+        .clientes({ busca: buscaIndicacao, ordem: 'nome' })
+        .then((l) => valido && setIndicacoes(l.slice(0, 6)))
+        .catch(() => {});
     }, 220);
-    return () => clearTimeout(t);
+    return () => {
+      valido = false;
+      clearTimeout(t);
+    };
   }, [form.canal, buscaIndicacao]);
 
   const faltando = [];
   if (!form.name.trim()) faltando.push('nome do dono');
-  if (somenteNumeros(form.whatsapp).length < 10) faltando.push('WhatsApp');
+  if (somenteNumeros(form.whatsapp).length < 10 || validarTelefone(form.whatsapp)) faltando.push('WhatsApp válido');
   if (presencial) {
     if (!form.company.trim()) faltando.push('nome do comércio');
     if (!form.segment) faltando.push('segmento');
@@ -110,8 +125,19 @@ export default function NovoLead({ onFechar, onCriado }) {
     if (!form.canal) faltando.push('origem');
     if (form.canal === 'indicacao' && !form.indicadoPor) faltando.push('quem indicou');
     if (!form.declaracao) faltando.push('declaração');
+    if (print && print.comResposta == null) faltando.push('dizer se o print tem a resposta do lojista');
   }
   const bloqueado = Boolean(duplicado) || Boolean(receita?.erro);
+
+  // Remoto: valida na hora só com CNPJ ativo na Receita e print com a resposta
+  const receitaAtiva = Boolean(receita?.ok && (receita.ativa ?? String(receita.situacao ?? '').toUpperCase() === 'ATIVA'));
+  const previsaoRemoto = !print
+    ? { ok: false, motivo: 'falta o print da conversa' }
+    : print.comResposta !== true
+      ? { ok: false, motivo: 'o print não mostra a resposta do lojista' }
+      : !receitaAtiva
+        ? { ok: false, motivo: 'a Receita ainda não confirmou o CNPJ ativo' }
+        : { ok: true };
 
   const salvar = async () => {
     if (faltando.length) return toast(`Falta: ${faltando.join(', ')}.`, 'erro');
@@ -139,7 +165,8 @@ export default function NovoLead({ onFechar, onCriado }) {
             canal: form.canal,
             indicadoPor: form.canal === 'indicacao' ? form.indicadoPor : undefined,
             declaracao: form.declaracao,
-            print: print ?? undefined,
+            // Print sem a resposta do lojista não valida o lead: não gasta 4G subindo
+            print: print?.comResposta ? print : undefined,
             proximoEm: isoDoInput(proximoEm),
           };
 
@@ -176,7 +203,7 @@ export default function NovoLead({ onFechar, onCriado }) {
       sujo={Boolean(foto || print || resultado || Object.entries(form).some(([k, v]) => v && v !== VAZIO[k]))}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-brand" onClick={salvar} disabled={salvando || bloqueado}>
             {salvando ? 'Salvando...' : 'Salvar lead'}
           </button>
@@ -209,6 +236,16 @@ export default function NovoLead({ onFechar, onCriado }) {
           />
           {receita?.carregando && <span className="mini">Consultando a Receita...</span>}
           {receita?.erro && <span className="mini erro-campo">{receita.erro}</span>}
+          {receita?.semRede && (
+            <span className="linha" style={{ flexWrap: 'wrap' }}>
+              <span className="mini crescer">
+                Sem internet agora. Consulte de novo, ou salve: o lead fica pendente até a Receita confirmar.
+              </span>
+              <button type="button" className="btn btn-sm" onClick={() => setTentativaCnpj((n) => n + 1)}>
+                Consultar de novo
+              </button>
+            </span>
+          )}
           {receita?.aviso && <span className="mini">{receita.aviso}</span>}
           {receita?.ok && (
             <div className="receita-ok">
@@ -348,6 +385,10 @@ export default function NovoLead({ onFechar, onCriado }) {
           )}
 
           <PrintConversa print={print} onChange={setPrint} />
+          {/* O que acontece ao salvar: o vendedor sabe antes se o lead já conta */}
+          <p className={`mini ${previsaoRemoto.ok ? 'situacao-ok' : 'situacao-alerta'}`}>
+            {previsaoRemoto.ok ? '✓ Vai entrar validado.' : `Vai entrar pendente (não conta ainda): ${previsaoRemoto.motivo}.`}
+          </p>
 
           <label className="marcacao declaracao">
             <input

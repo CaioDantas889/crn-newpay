@@ -12,7 +12,14 @@ const CONTAS = [
 export default function Login() {
   const { entrar, toast } = useApp();
   const [demo, setDemo] = useState(false);
-  const [email, setEmail] = useState('');
+  // O e-mail do último login já vem preenchido: no celular, digitar e-mail cansa
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem('newpay.email') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [senha, setSenha] = useState('');
   const [entrando, setEntrando] = useState(false);
 
@@ -24,8 +31,8 @@ export default function Login() {
       .then((m) => {
         if (!m.demo) return;
         setDemo(true);
-        setEmail('carlos@newpay.com.br');
-        setSenha('newpay123');
+        setEmail((atual) => atual || 'carlos@newpay.com.br');
+        setSenha((atual) => atual || 'newpay123');
       })
       .catch(() => setDemo(false));
   }, []);

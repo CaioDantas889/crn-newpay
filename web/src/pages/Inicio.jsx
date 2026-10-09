@@ -10,7 +10,17 @@ import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { duracao, hora, relativo } from '../lib/date.js';
 import { Carregando, Falha, Progresso, Vazio } from '../components/ui.jsx';
-import { FollowupCard } from '../components/Followup.jsx';
+import { FollowupCard, canalDoFollowup } from '../components/Followup.jsx';
+
+// Follow-ups do dia por canal: o que se faz pelo celular e o que pede ir à loja
+const GRUPOS_FOLLOWUP = [
+  { canal: 'mensagem', rotulo: (n) => `${n} ${n === 1 ? 'mensagem' : 'mensagens'} de WhatsApp` },
+  { canal: 'ligacao', rotulo: (n) => `${n} ${n === 1 ? 'ligação' : 'ligações'}` },
+  { canal: 'revisita', rotulo: (n) => `${n} ${n === 1 ? 'revisita' : 'revisitas'} (vá até a loja)` },
+];
+const porHorarioELoja = (a, b) =>
+  new Date(a.dueAt) - new Date(b.dueAt) || String(a.client?.company ?? '').localeCompare(String(b.client?.company ?? ''));
+const variasCidades = (lista) => new Set(lista.map((f) => f.client?.city).filter(Boolean)).size > 1;
 import AtivarMaquina from '../components/AtivarMaquina.jsx';
 import { NegocioLinha } from '../components/Negocio.jsx';
 
@@ -37,10 +47,13 @@ export default function Inicio() {
     ? `${placarDoTopo.total}|${placarDoTopo.pendentes}|${placarDoTopo.atrasados}`
     : null;
   const ultimaChave = useRef(chavePlacar);
+  // Concluir um follow-up daqui já recarrega a lista; a mudança do placar que
+  // vem logo depois não precisa buscar tudo de novo
+  const pularPlacarAte = useRef(0);
   const [versaoDia, setVersaoDia] = useState(0);
   useEffect(() => {
     if (chavePlacar === null) return;
-    if (ultimaChave.current === null) {
+    if (ultimaChave.current === null || Date.now() < pularPlacarAte.current) {
       ultimaChave.current = chavePlacar;
       return;
     }
@@ -49,7 +62,13 @@ export default function Inicio() {
       setVersaoDia((v) => v + 1);
     }
   }, [chavePlacar]);
-  const { dados: dia, erro: erroDoDia, recarregar } = useRecurso(() => endpoints.hoje(), [versaoDia]);
+  const { dados: dia, erro: erroDoDia, recarregar } = useRecurso(() => endpoints.hoje(), [versaoDia], {
+    manterAoTrocar: true,
+  });
+  const recarregarDia = () => {
+    pularPlacarAte.current = Date.now() + 5000;
+    recarregar();
+  };
 
   // Sem isto, uma falha (servidor fora do ar, ou ainda na versão anterior logo
   // depois de uma atualização) deixaria a tela carregando para sempre.
@@ -64,6 +83,12 @@ export default function Inicio() {
   const pendentes = dados.ativacoes ?? SEM_PENDENCIAS;
   const { placar, followups, contagens, semContar, sequencia } = dia;
   const faltam = Math.max(0, resumo.meta.metaMaquinas - resumo.maquinasAtivadas);
+  const NOMES_KPI = { visitas: 'visitas', novosLeads: 'leads', propostas: 'propostas', maquinas: 'máquinas' };
+  const novosDepoisDoFechamento = kpiHoje.fechado && kpiHoje.registrado
+    ? Object.entries(NOMES_KPI)
+        .map(([k, nome]) => [nome, (kpiHoje.calculado[k] ?? 0) - (kpiHoje.registrado[k] ?? 0)])
+        .filter(([, n]) => n > 0)
+    : [];
   const hoje = new Date();
   const saudacao = hoje.getHours() < 12 ? 'Bom dia' : hoje.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
 
@@ -94,7 +119,9 @@ export default function Inicio() {
           <p className="card-pad mini">Nenhum follow-up atrasado. É isso que mantém o semáforo verde.</p>
         ) : (
           <div className="followups">
-            {followups.atrasados.map((f) => <FollowupCard key={f.id} followup={f} onMudou={recarregar} />)}
+            {followups.atrasados.map((f) => (
+              <FollowupCard key={f.id} followup={f} onMudou={recarregarDia} mostrarCidade={variasCidades(followups.atrasados)} />
+            ))}
           </div>
         )}
       </div>
@@ -115,7 +142,18 @@ export default function Inicio() {
           </p>
         ) : (
           <div className="followups">
-            {followups.hoje.map((f) => <FollowupCard key={f.id} followup={f} onMudou={recarregar} />)}
+            {GRUPOS_FOLLOWUP.map(({ canal, rotulo }) => {
+              const doGrupo = followups.hoje.filter((f) => canalDoFollowup(f) === canal).sort(porHorarioELoja);
+              if (!doGrupo.length) return null;
+              return (
+                <div key={canal}>
+                  <div className="followups-grupo">{rotulo(doGrupo.length)}</div>
+                  {doGrupo.map((f) => (
+                    <FollowupCard key={f.id} followup={f} onMudou={recarregarDia} mostrarCidade={variasCidades(followups.hoje)} />
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -239,17 +277,38 @@ export default function Inicio() {
         </div>
       )}
 
-      {!kpiHoje.fechado && hoje.getHours() >= 16 && (
-        <button className="card card-pad linha alerta-kpi" onClick={() => navigate('/fechar-dia')}>
+      {/* Fechar o dia: no fim do expediente (ou depois das 18h, fim da meta).
+          Com o ponto aberto, o caminho é encerrar o expediente — lá o
+          fechamento abre sozinho, já preenchido. */}
+      {!kpiHoje.fechado && (kpiHoje.expedienteEncerradoHoje || hoje.getHours() >= 18) && (
+        <button
+          className="card card-pad linha alerta-kpi"
+          onClick={() => navigate(kpiHoje.expedienteAberto ? '/expediente' : '/fechar-dia')}
+        >
           <span style={{ fontSize: '1.4rem' }}>▤</span>
           <div className="crescer" style={{ textAlign: 'left' }}>
-            <b>Você ainda não fechou o dia</b>
+            <b>{kpiHoje.expedienteAberto ? 'Encerrar expediente e fechar o dia' : 'Você ainda não fechou o dia'}</b>
             <p className="mini">
               {kpiHoje.calculado.visitas} visitas · {kpiHoje.calculado.propostas} propostas ·{' '}
               {kpiHoje.calculado.maquinas} máquinas registradas até agora.
             </p>
           </div>
-          <span className="btn btn-sm">Fechar agora</span>
+          <span className="btn btn-sm">{kpiHoje.expedienteAberto ? 'Encerrar' : 'Fechar agora'}</span>
+        </button>
+      )}
+
+      {/* Dia fechado, mas o CRM registrou mais coisa depois: o painel do
+          gestor só vê o que foi fechado, então vale atualizar */}
+      {novosDepoisDoFechamento.length > 0 && (
+        <button className="card card-pad linha alerta-kpi" onClick={() => navigate('/fechar-dia')}>
+          <span style={{ fontSize: '1.4rem' }}>↻</span>
+          <div className="crescer" style={{ textAlign: 'left' }}>
+            <b>Entrou mais coisa depois do fechamento</b>
+            <p className="mini">
+              {novosDepoisDoFechamento.map(([nome, n]) => `+${n} ${nome}`).join(' · ')} ainda fora do painel do gestor.
+            </p>
+          </div>
+          <span className="btn btn-sm">Atualizar</span>
         </button>
       )}
 

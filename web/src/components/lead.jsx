@@ -153,7 +153,8 @@ export function PrintConversa({ print, onChange, obrigatorio = false }) {
     if (!arquivo) return;
     setLendo(true);
     try {
-      onChange({ ...(await prepararPrint(arquivo)), comResposta: false });
+      // Nada vem marcado: o vendedor diz se o print tem a resposta do lojista
+      onChange({ ...(await prepararPrint(arquivo)), comResposta: null });
     } catch (erro) {
       toast(erro.message, 'erro');
     } finally {
@@ -170,14 +171,25 @@ export function PrintConversa({ print, onChange, obrigatorio = false }) {
             <img src={print.dataUrl} alt="Print da conversa" />
           </a>
           <div className="crescer coluna" style={{ gap: 6 }}>
-            <label className="marcacao">
-              <input
-                type="checkbox"
-                checked={print.comResposta}
-                onChange={(e) => onChange({ ...print, comResposta: e.target.checked })}
-              />
-              <span>O print mostra a <b>data</b> e a <b>resposta do lojista</b></span>
-            </label>
+            <span className="mini">O print mostra a data e a resposta do lojista?</span>
+            <div className="opcoes">
+              <button
+                type="button"
+                className={`opcao${print.comResposta === true ? ' ativa' : ''}`}
+                aria-pressed={print.comResposta === true}
+                onClick={() => onChange({ ...print, comResposta: true })}
+              >
+                Tem a resposta do lojista
+              </button>
+              <button
+                type="button"
+                className={`opcao${print.comResposta === false ? ' ativa' : ''}`}
+                aria-pressed={print.comResposta === false}
+                onClick={() => onChange({ ...print, comResposta: false })}
+              >
+                Ainda sem resposta
+              </button>
+            </div>
             <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onChange(null)}>
               Trocar print
             </button>
@@ -221,7 +233,11 @@ export function useLocalAgora(ativo = true) {
   return { local, erro, buscando, buscar };
 }
 
-export function LocalAgora({ gps, obrigatorio = false }) {
+/**
+ * `obrigatorio`: sem GPS não salva (lead presencial novo: é a prova).
+ * `podeSemGps`: salva sem, mas a gestão vê (revisita, igual ao "Visitei").
+ */
+export function LocalAgora({ gps, obrigatorio = false, podeSemGps = false }) {
   const { local, erro, buscando, buscar } = gps;
   if (buscando) return <p className="mini">⌖ Procurando sua localização...</p>;
   if (local) {
@@ -237,6 +253,7 @@ export function LocalAgora({ gps, obrigatorio = false }) {
       <span className={`mini crescer${obrigatorio ? ' erro-campo' : ''}`}>
         ⌖ {erro ?? 'Sem localização do aparelho.'}
         {obrigatorio ? ' Sem ela não dá para salvar.' : ''}
+        {podeSemGps ? ' Se salvar assim, a revisita fica "sem GPS" e a gestão vê.' : ''}
       </span>
       <button type="button" className="btn btn-sm" onClick={buscar}>Tentar de novo</button>
     </div>

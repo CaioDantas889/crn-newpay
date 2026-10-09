@@ -8,7 +8,7 @@ import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { diaMes, hora } from '../lib/date.js';
 import { isoDoInput, linkTelefone, linkWhatsApp } from '../lib/contato.js';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 import {
   LocalAgora, LojistaMarcou, PrintConversa, ResultadoChips, VENDA_VAZIA, VendaCampos, agoraParaInput, faltaNaVenda,
   useLocalAgora,
@@ -23,7 +23,17 @@ const quando = (iso) => {
   return `${hoje ? 'hoje' : diaMes(iso)} às ${hora(iso)}`;
 };
 
-export function FollowupCard({ followup: f, onMudou }) {
+/** Como o follow-up é feito: pelo celular (mensagem ou ligação) ou indo à loja */
+export const canalDoFollowup = (f) =>
+  ['whatsapp', 'resgate', 'resgate_final'].includes(f.acao) ? 'mensagem' : f.acao === 'revisita' ? 'revisita' : 'ligacao';
+
+/**
+ * Dois botões na linha principal — o contato e o resultado — e o resto numa
+ * linha discreta. A hora só aparece quando significa algo: atraso, ou data que
+ * o lojista marcou (o 09:00 padrão parecia hora combinada e não era).
+ * `mostrarCidade`: só quando a lista tem mais de uma cidade.
+ */
+export function FollowupCard({ followup: f, onMudou, mostrarCidade = true }) {
   const { toast } = useApp();
   const [concluir, setConcluir] = useState(false);
   const [detalhe, setDetalhe] = useState(false);
@@ -55,12 +65,14 @@ export function FollowupCard({ followup: f, onMudou }) {
         <div className="crescer" style={{ minWidth: 0 }}>
           <Link to={`/carteira/${c.id}`} className="followup-loja truncar">{c.company}</Link>
           <span className="mini truncar" style={{ display: 'block' }}>
-            {f.passo.label} · {c.name}{c.city ? ` · ${c.city}` : ''}
+            {f.passo.label} · {c.name}{mostrarCidade && c.city ? ` · ${c.city}` : ''}
           </span>
         </div>
-        <span className={`chip ${f.atrasado ? 'chip-erro' : ''}`}>
-          {f.atrasado ? `${f.diasAtraso} dia(s) de atraso` : hora(f.dueAt)}
-        </span>
+        {f.atrasado ? (
+          <span className="chip chip-erro">{f.diasAtraso} dia(s) de atraso</span>
+        ) : f.marcadoPeloLojista ? (
+          <span className="chip" title="Data marcada pelo lojista">◷ {hora(f.dueAt)}</span>
+        ) : null}
       </div>
 
       {f.combinado && <p className="mini">Combinado: {f.combinado}</p>}
@@ -80,27 +92,31 @@ export function FollowupCard({ followup: f, onMudou }) {
             className="btn btn-sm" target="_blank" rel="noreferrer"
             href={linkWhatsApp(c.whatsapp, f.mensagem ?? '')} onClick={abriuWhatsApp}
           >
-            ✉︎ Abrir WhatsApp com a mensagem
+            ✉︎ WhatsApp
           </a>
         )}
         {f.acao === 'ligacao' && <a className="btn btn-sm" href={linkTelefone(c.phone || c.whatsapp)}>✆︎ Ligar</a>}
         {f.acao === 'revisita' && c.rota && (
-          <a className="btn btn-sm" href={c.rota} target="_blank" rel="noreferrer">▨ Rota no mapa</a>
-        )}
-        {(f.mensagem || f.roteiro) && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDetalhe((v) => !v)}>
-            {detalhe ? 'Ocultar' : f.roteiro ? 'Roteiro' : 'Ver mensagem'}
-          </button>
-        )}
-        {!f.atrasado && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemarcar(remarcar === null ? '' : null)}>
-            ◷ Lojista remarcou
-          </button>
+          <a className="btn btn-sm" href={c.rota} target="_blank" rel="noreferrer">▨ Rota</a>
         )}
         <button type="button" className="btn btn-brand btn-sm" onClick={() => setConcluir(true)}>
           Registrar resultado
         </button>
       </div>
+      {((f.mensagem || f.roteiro) || !f.atrasado) && (
+        <div className="followup-acoes-sec">
+          {(f.mensagem || f.roteiro) && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDetalhe((v) => !v)}>
+              {detalhe ? 'Ocultar' : f.roteiro ? 'Roteiro' : 'Ver mensagem'}
+            </button>
+          )}
+          {!f.atrasado && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemarcar(remarcar === null ? '' : null)}>
+              ◷ Lojista remarcou
+            </button>
+          )}
+        </div>
+      )}
 
       {remarcar !== null && (
         <div className="linha">
@@ -138,9 +154,13 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       ? faltaNaVenda(venda)
     : f.exigePrint && !print
       ? 'Lead remoto: anexe o print da conversa.'
-      : f.exigeGps && !gps.local
-        ? 'Revisita se registra no local: falta a localização.'
-        : null;
+      : f.exigePrint && print.comResposta == null
+        ? 'Diga se o print tem a resposta do lojista.'
+        : f.exigeGps && !gps.local && !gps.erro
+          ? 'Pegando sua localização... espere alguns segundos.'
+          : null;
+  // Revisita com o GPS que falhou de verdade: salva, marcada para a gestão
+  const semGps = f.exigeGps && !gps.local && Boolean(gps.erro);
 
   const salvar = async () => {
     if (falta) return toast(falta, 'erro');
@@ -168,6 +188,15 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       onConcluido?.(r);
       onFechar();
     } catch (erro) {
+      // "Já foi concluído": o primeiro envio chegou e a resposta se perdeu no
+      // 4G. O resultado está salvo — é só fechar.
+      if (erro.status === 409) {
+        toast('Este resultado já estava registrado.');
+        recarregarPlacar();
+        onConcluido?.();
+        onFechar();
+        return;
+      }
       toast(erro.message, 'erro');
     } finally {
       setSalvando(false);
@@ -182,9 +211,9 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       sujo={Boolean(resultado || notes.trim() || print)}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-brand" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Registrar resultado'}
+            {salvando ? 'Salvando...' : semGps ? 'Salvar sem GPS (a gestão verá)' : 'Registrar resultado'}
           </button>
         </>
       }
@@ -195,7 +224,7 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       )}
 
       {f.exigePrint && <PrintConversa print={print} onChange={setPrint} obrigatorio />}
-      {f.exigeGps && <LocalAgora gps={gps} obrigatorio />}
+      {f.exigeGps && <LocalAgora gps={gps} podeSemGps />}
 
       <div className="campo">
         <label htmlFor="cf-obs">O que o lojista falou</label>

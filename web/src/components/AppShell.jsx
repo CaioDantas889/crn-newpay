@@ -78,13 +78,17 @@ export default function AppShell() {
   // Busca global: sugere clientes enquanto digita
   useEffect(() => {
     if (busca.trim().length < 2) return setResultados(null);
+    let valido = true;
     const t = setTimeout(() => {
       endpoints
         .clientes({ busca: busca.trim(), ordem: 'score' })
-        .then((lista) => setResultados(lista.slice(0, 8)))
-        .catch(() => setResultados([]));
+        .then((lista) => valido && setResultados(lista.slice(0, 8)))
+        .catch(() => valido && setResultados([]));
     }, 220);
-    return () => clearTimeout(t);
+    return () => {
+      valido = false;
+      clearTimeout(t);
+    };
   }, [busca]);
 
   // Atalhos do app instalado (manifest): abrir direto no registro de visita

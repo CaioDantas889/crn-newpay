@@ -85,9 +85,11 @@ if (config.origens.length) {
       !origem || config.origens.includes(origem)
         ? cb(null, true)
         : cb(new Error('Origem não autorizada.')),
+    // o app lê o token renovado (ver requireAuth)
+    exposedHeaders: ['X-Token-Novo'],
   }));
 } else if (!config.producao) {
-  app.use(cors());
+  app.use(cors({ exposedHeaders: ['X-Token-Novo'] }));
 }
 
 app.use(express.json({ limit: '25mb' })); // fotos e áudios de visita chegam em base64
@@ -197,6 +199,14 @@ if (config.servirFront && temBuild) {
 }
 
 app.use((err, req, res, next) => {
+  // Foto ou áudio acima do limite do corpo: o vendedor precisa saber o que fazer
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Foto ou áudio grande demais. Tire a foto de novo ou grave um áudio mais curto.' });
+  }
+  // Corpo que não é JSON válido (rede cortou no meio do envio)
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'O envio chegou incompleto. Tente de novo.' });
+  }
   console.error('[api] erro:', err);
   res.status(500).json({ error: 'Erro interno no servidor.' });
 });

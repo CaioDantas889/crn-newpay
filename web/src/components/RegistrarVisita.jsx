@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
-import { isoDoInput } from '../lib/contato.js';
-import { Modal } from './ui.jsx';
+import { isoDoInput, pegarPosicao } from '../lib/contato.js';
+import { CancelarModal, Modal } from './ui.jsx';
 import { LojistaMarcou, VENDA_VAZIA, VendaCampos, faltaNaVenda } from './lead.jsx';
 
 /** Reduz a foto antes de enviar: o celular do vendedor costuma estar no 4G */
@@ -55,12 +55,9 @@ const MOTIVOS_MICROFONE = {
   AbortError: 'A gravação foi interrompida pelo navegador. Tente de novo.',
 };
 
-/** Códigos do navegador para falha de GPS (1 negado, 2 indisponível, 3 demorou) */
-const MOTIVOS_LOCALIZACAO = {
-  1: 'Localização bloqueada para este endereço. Libere no cadeado da barra de endereço.',
-  2: 'O aparelho não conseguiu achar a posição. Saia de perto de paredes e tente de novo.',
-  3: 'O GPS demorou demais para responder. Tente de novo.',
-};
+// Quanto o Salvar espera o GPS que ainda está chegando. O prazo do próprio
+// navegador não corre enquanto o pedido de permissão está aberto na tela.
+const ESPERA_GPS_MS = 10_000;
 
 /** Impedimento do próprio ambiente (endereço sem HTTPS, navegador sem suporte) */
 function verificarSuporteAudio() {
@@ -93,6 +90,12 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const [localErro, setLocalErro] = useState(null);
   const [buscandoLocal, setBuscandoLocal] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [esperandoGps, setEsperandoGps] = useState(false);
+  // Uma chave por visita: repetir o Salvar depois de a resposta se perder no
+  // 4G devolve a mesma visita em vez de gravar outra (e outra venda)
+  const chave = useRef(
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
 
   const gravadorRef = useRef(null);
   const pedacosRef = useRef([]);
@@ -102,33 +105,37 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   // Busca de cliente só quando a visita não veio de um cliente específico
   useEffect(() => {
     if (clienteInicial) return undefined;
+    let valido = true;
     const t = setTimeout(() => {
-      endpoints.clientes({ busca, ordem: 'contato' }).then((l) => setOpcoes(l.slice(0, 8))).catch(() => {});
+      endpoints
+        .clientes({ busca, ordem: 'contato' })
+        .then((l) => valido && setOpcoes(l.slice(0, 8)))
+        .catch(() => {});
     }, 220);
-    return () => clearTimeout(t);
+    return () => {
+      valido = false;
+      clearTimeout(t);
+    };
   }, [busca, clienteInicial]);
 
-  // GPS do momento da visita. Quando falha, a visita ainda é registrada — mas
-  // com a coordenada cadastrada do cliente, então o vendedor precisa saber.
+  // GPS do momento da visita. Quando falha de verdade, a visita ainda é
+  // registrada, marcada "sem GPS" para a gestão — então o vendedor precisa
+  // saber. A promessa fica guardada: o Salvar espera por ela se ainda não chegou.
+  const posicaoRef = useRef(Promise.resolve(null));
   const pegarLocalizacao = useCallback(() => {
-    if (!window.isSecureContext) {
-      return setLocalErro(`Localização só funciona em HTTPS ou localhost (aqui é ${window.location.origin}).`);
-    }
-    if (!navigator.geolocation) return setLocalErro('Este aparelho não informa a localização.');
-
     setLocalErro(null);
     setBuscandoLocal(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocal({ lat: pos.coords.latitude, lng: pos.coords.longitude, precisao: Math.round(pos.coords.accuracy) });
-        setBuscandoLocal(false);
-      },
-      (erro) => {
-        setBuscandoLocal(false);
-        setLocalErro(MOTIVOS_LOCALIZACAO[erro.code] ?? 'Não consegui pegar a localização.');
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30_000 }
-    );
+    posicaoRef.current = pegarPosicao()
+      .then((pos) => {
+        setLocal(pos);
+        return pos;
+      })
+      .catch((erro) => {
+        setLocalErro(erro.message);
+        return null;
+      })
+      .finally(() => setBuscandoLocal(false));
+    return posicaoRef.current;
   }, []);
 
   useEffect(() => {
@@ -218,16 +225,26 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       // visita sem o áudio que o vendedor acabou de gravar.
       const audioFinal = gravando ? await pararGravacao() : audio;
 
+      // Salvou rápido e o GPS ainda vem chegando: espera um pouco por ele,
+      // senão a visita sai "sem GPS" e vira suspeita para a gestão
+      let pos = local;
+      if (!pos && buscandoLocal) {
+        setEsperandoGps(true);
+        pos = await Promise.race([posicaoRef.current, new Promise((r) => setTimeout(() => r(null), ESPERA_GPS_MS))]);
+        setEsperandoGps(false);
+      }
+
       const resposta = await endpoints.registrarVisita({
+        chave: chave.current,
         clientId: cliente.id,
         resultado,
         notes,
         fotos,
         audio: audioFinal,
         eventId,
-        lat: local?.lat,
-        lng: local?.lng,
-        precisao: local?.precisao,
+        lat: pos?.lat,
+        lng: pos?.lng,
+        precisao: pos?.precisao,
         proximoEm: isoDoInput(proximoEm),
         venda: resultado === 'fechado' ? venda : undefined,
       });
@@ -237,7 +254,9 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
         : null;
 
       toast(
-        resultado === 'fechado'
+        resposta.repetido
+          ? 'Esta visita já tinha sido salva antes de a conexão cair.'
+          : resultado === 'fechado'
           ? `Venda registrada! ${resposta.negocio?.maquinas ?? venda.maquinas} máquina(s). Agora é ativar.`
           : dataRetorno
             ? `Visita registrada. Próximo follow-up em ${dataRetorno}.`
@@ -255,6 +274,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       toast(err.message, 'erro');
     } finally {
       setSalvando(false);
+      setEsperandoGps(false);
     }
   };
 
@@ -268,9 +288,24 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       sujo={Boolean(resultado || notes.trim() || fotos.length || audio || gravando)}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          {/* A situação do GPS fica à vista, junto do Salvar */}
+          {cliente && (
+            <div className="rodape-status mini">
+              {buscandoLocal ? (
+                <span>⌖ Procurando sua localização...</span>
+              ) : local ? (
+                <span>⌖ Localização capturada{local.precisao ? ` (~${local.precisao} m)` : ''}.</span>
+              ) : (
+                <span className="linha">
+                  <span className="crescer">⌖ {localErro ?? 'Sem localização do aparelho.'} A visita fica “sem GPS” para a gestão.</span>
+                  <button type="button" className="btn btn-sm" onClick={pegarLocalizacao}>Tentar de novo</button>
+                </span>
+              )}
+            </div>
+          )}
+          <CancelarModal />
           <button className="btn btn-brand" onClick={salvar} disabled={salvando || !cliente || !resultado}>
-            {salvando ? 'Salvando...' : 'Salvar visita'}
+            {esperandoGps ? 'Salvando... pegando sua localização' : salvando ? 'Salvando...' : 'Salvar visita'}
           </button>
         </>
       }
@@ -413,28 +448,6 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
             )}
           </div>
 
-          <div className="campo">
-            {buscandoLocal && <p className="mini">⌖ Procurando sua localização...</p>}
-
-            {local && !buscandoLocal && (
-              <p className="mini">
-                ⌖ Localização capturada no momento da visita
-                {local.precisao ? ` (precisão de ~${local.precisao} m)` : ''}.
-              </p>
-            )}
-
-            {!local && !buscandoLocal && (
-              <div className="linha">
-                <span className="mini crescer">
-                  ⌖ {localErro ?? 'Sem localização do aparelho.'} A visita fica registrada como
-                  “sem GPS” e aparece assim para a gestão.
-                </span>
-                <button type="button" className="btn btn-sm" onClick={pegarLocalizacao}>
-                  Tentar de novo
-                </button>
-              </div>
-            )}
-          </div>
         </>
       )}
     </Modal>

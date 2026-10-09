@@ -126,8 +126,14 @@ button.cliente-linha {
   padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line);
 }
 .followup-texto.roteiro { padding-left: 26px; display: flex; flex-direction: column; gap: 4px; }
-.followup-acoes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.followup-acoes .btn-brand { margin-left: auto; }
+/* Linha principal: o contato e o resultado, lado a lado e do mesmo tamanho */
+.followup-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.followup-acoes > :only-child { grid-column: 1 / -1; }
+.followup-acoes-sec { display: flex; gap: 6px; flex-wrap: wrap; margin-top: -2px; }
+.followups-grupo {
+  padding: 8px 12px 2px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-3);
+}
 
 /* Status do lead na meta */
 .chip-status { text-transform: capitalize; }

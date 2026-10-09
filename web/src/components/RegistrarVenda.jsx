@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
-import { Modal } from './ui.jsx';
+import { CancelarModal, Modal } from './ui.jsx';
 import { VENDA_VAZIA, VendaCampos, faltaNaVenda } from './lead.jsx';
 
 const TITULOS = {
@@ -33,6 +33,12 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
   const [venda, setVenda] = useState(negocio ? deNegocio(negocio) : VENDA_VAZIA);
   const [notes, setNotes] = useState(negocio?.notes ?? '');
   const [salvando, setSalvando] = useState(false);
+  // Escolha feita pelo vendedor (os dados que vêm prontos da proposta não contam)
+  const [tocou, setTocou] = useState(false);
+  const mudarVenda = (valor) => {
+    if (typeof valor !== 'function') setTocou(true);
+    setVenda(valor);
+  };
 
   const salvar = async () => {
     if (modo !== 'proposta') {
@@ -72,9 +78,10 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
       titulo={TITULOS[modo] ?? TITULOS.venda}
       subtitulo={`${cliente.company}${cliente.city ? ` — ${cliente.city}` : ''}`}
       onFechar={onFechar}
+      sujo={tocou}
       rodape={
         <>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <CancelarModal />
           <button className="btn btn-brand" onClick={salvar} disabled={salvando}>
             {salvando ? 'Salvando...' : modo === 'proposta' ? 'Registrar proposta' : modo === 'editar' ? 'Salvar' : '★ Registrar venda'}
           </button>
@@ -89,7 +96,7 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
       )}
       <VendaCampos
         venda={venda}
-        onChange={setVenda}
+        onChange={mudarVenda}
         clienteId={modo === 'venda' && !negocio ? cliente.id : undefined}
         titulo={modo === 'proposta' ? 'Dados da proposta' : 'Dados da venda'}
         proposta={modo === 'proposta'}
