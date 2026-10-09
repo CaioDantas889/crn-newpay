@@ -75,13 +75,15 @@ router.post('/', (req, res) => {
   }, {});
 
   const existente = table('dailyKpis').find((k) => k.userId === req.user.id && k.date === data);
+  const calculadoNoFechamento = CAMPOS.reduce((acc, campo) => ({ ...acc, [campo]: automatico[campo] ?? 0 }), {});
   const registro = existente
-    ? update('dailyKpis', existente.id, { ...valores, fechadoAt: new Date().toISOString() })
+    ? update('dailyKpis', existente.id, { ...valores, calculadoNoFechamento, fechadoAt: new Date().toISOString() })
     : insert('dailyKpis', {
         id: id('kpi'),
         userId: req.user.id,
         date: data,
         ...valores,
+        calculadoNoFechamento,
         fechadoAt: new Date().toISOString(),
       });
 

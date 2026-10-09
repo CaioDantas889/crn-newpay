@@ -84,9 +84,11 @@ export default function Inicio() {
   const { placar, followups, contagens, semContar, sequencia } = dia;
   const faltam = Math.max(0, resumo.meta.metaMaquinas - resumo.maquinasAtivadas);
   const NOMES_KPI = { visitas: 'visitas', novosLeads: 'leads', propostas: 'propostas', maquinas: 'máquinas' };
-  const novosDepoisDoFechamento = kpiHoje.fechado && kpiHoje.registrado
+  // Compara com o que o CRM contava ao fechar, não com a correção do vendedor
+  const naHoraDeFechar = kpiHoje.registrado?.calculadoNoFechamento;
+  const novosDepoisDoFechamento = kpiHoje.fechado && naHoraDeFechar
     ? Object.entries(NOMES_KPI)
-        .map(([k, nome]) => [nome, (kpiHoje.calculado[k] ?? 0) - (kpiHoje.registrado[k] ?? 0)])
+        .map(([k, nome]) => [nome, (kpiHoje.calculado[k] ?? 0) - (naHoraDeFechar[k] ?? 0)])
         .filter(([, n]) => n > 0)
     : [];
   const hoje = new Date();

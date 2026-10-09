@@ -78,6 +78,7 @@ export default function RegistrarVenda({ cliente, negocio = null, modo = 'venda'
       titulo={TITULOS[modo] ?? TITULOS.venda}
       subtitulo={`${cliente.company}${cliente.city ? ` — ${cliente.city}` : ''}`}
       onFechar={onFechar}
+      ocupado={salvando}
       sujo={tocou}
       rodape={
         <>

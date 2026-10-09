@@ -3,7 +3,7 @@
 // cliente entra — sem isso ele ficava preso na carteira do gestor, onde
 // vendedor nenhum enxerga.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
 import { mascaraDocumento, mascaraTelefone, validarDocumento, validarTelefone } from '../lib/mascaras.js';
@@ -18,6 +18,8 @@ export default function NovoCliente({ onFechar, onCriado, ownerIdPadrao = '' }) 
   const [equipe, setEquipe] = useState([]);
   const [local, setLocal] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  // Reenvio depois de a resposta se perder: o servidor devolve o mesmo cliente
+  const chave = useRef(globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
     if (!ehGestor) return;
@@ -71,7 +73,9 @@ export default function NovoCliente({ onFechar, onCriado, ownerIdPadrao = '' }) 
     }
     setSalvando(true);
     try {
-      const cliente = await endpoints.criarCliente({ ...form, ownerId: form.ownerId || undefined, ...(local ?? {}) });
+      const cliente = await endpoints.criarCliente({
+        ...form, chave: chave.current, ownerId: form.ownerId || undefined, ...(local ?? {}),
+      });
       const dono = equipe.find((v) => v.id === form.ownerId);
       toast(
         dono
@@ -92,6 +96,7 @@ export default function NovoCliente({ onFechar, onCriado, ownerIdPadrao = '' }) 
       titulo="Novo cliente"
       subtitulo="Cadastro rápido — o diagnóstico vem em seguida"
       onFechar={onFechar}
+      ocupado={salvando}
       rodape={
         <>
           <CancelarModal />

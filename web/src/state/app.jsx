@@ -51,6 +51,9 @@ export function AppProvider({ children }) {
   const timer = useRef(null);
   const reentradaRef = useRef(false);
   reentradaRef.current = reentrada;
+  // Sem ninguém logado na tela não há o que reentrar (ex.: 401 na abertura)
+  const userRef = useRef(null);
+  userRef.current = user;
 
   const fecharToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
@@ -82,6 +85,7 @@ export function AppProvider({ children }) {
   const entrar = useCallback(async (email, senha) => {
     const { token, user: logado } = await endpoints.login(email, senha);
     setToken(token);
+    setReentrada(false);
     try {
       localStorage.setItem('newpay.email', email);
     } catch {
@@ -164,7 +168,7 @@ export function AppProvider({ children }) {
       // Só a sessão venceu: a tela fica montada (com o lead ou a visita que
       // estava sendo preenchido) e um painel pede a senha de novo.
       if (code === 'sessao_vencida') {
-        setReentrada(true);
+        if (userRef.current) setReentrada(true);
         return;
       }
       // Senha trocada ou usuário sem acesso: é assim que o celular perdido

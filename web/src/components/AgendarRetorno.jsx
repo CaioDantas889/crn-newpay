@@ -50,6 +50,7 @@ export default function AgendarRetorno({ cliente, onFechar, onAgendado }) {
       titulo="▤ Agendar retorno"
       subtitulo={`${cliente.name} — ${cliente.company}`}
       onFechar={onFechar}
+      ocupado={salvando}
       rodape={
         <>
           <CancelarModal />

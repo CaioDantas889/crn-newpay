@@ -20,17 +20,22 @@ const novoId = () =>
  * O voltar do Android: ao abrir, o modal põe uma entrada no histórico; o
  * voltar consome essa entrada em vez de sair da tela (ou fechar o app
  * instalado). Fechando por botão, a entrada é retirada.
+ *
+ * `ocupado`: salvando ou excluindo. Aí nada fecha o modal (nem voltar, nem ✕,
+ * nem Cancelar): fechar no meio não cancelava a gravação, que seguia por trás
+ * e podia virar visita em dobro.
  */
-export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = false }) {
+export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = false, ocupado = false }) {
   const [mexeu, setMexeu] = useState(false);
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = novoId();
 
   // O fechamento sempre com os valores atuais, sem refazer os efeitos
-  const atual = useRef({ onFechar, precisa: false });
-  atual.current = { onFechar, precisa: Boolean(sujo || mexeu) };
+  const atual = useRef({ onFechar, precisa: false, ocupado: false });
+  atual.current = { onFechar, precisa: Boolean(sujo || mexeu), ocupado: Boolean(ocupado) };
 
   const tentarFechar = useCallback(() => {
+    if (atual.current.ocupado) return;
     if (atual.current.precisa && !window.confirm('Descartar o que você preencheu?')) return;
     atual.current.onFechar();
   }, []);
@@ -57,7 +62,7 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = fa
 
     const aoVoltar = (e) => {
       if (e.state?.modalId === id) return;
-      if (atual.current.precisa && !window.confirm('Descartar o que você preencheu?')) {
+      if (atual.current.ocupado || (atual.current.precisa && !window.confirm('Descartar o que você preencheu?'))) {
         window.history.pushState({ ...(window.history.state ?? {}), modalId: id }, '');
         return;
       }
@@ -81,7 +86,7 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = fa
   }, []);
 
   return (
-    <ModalContexto.Provider value={tentarFechar}>
+    <ModalContexto.Provider value={{ tentarFechar, ocupado: Boolean(ocupado) }}>
       <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && tentarFechar()}>
         <div className="modal" role="dialog" aria-modal="true" aria-label={titulo}>
           <div className="modal-header">
@@ -89,7 +94,7 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = fa
               <h2>{titulo}</h2>
               {subtitulo && <p className="mini">{subtitulo}</p>}
             </div>
-            <button className="btn btn-ghost btn-icone" onClick={tentarFechar} aria-label="Fechar">✕</button>
+            <button className="btn btn-ghost btn-icone" onClick={tentarFechar} disabled={ocupado} aria-label="Fechar">✕</button>
           </div>
           <div className="modal-corpo" onInput={() => !mexeu && setMexeu(true)}>{children}</div>
           {rodape && <div className="modal-rodape">{rodape}</div>}
@@ -101,9 +106,9 @@ export function Modal({ titulo, subtitulo, onFechar, children, rodape, sujo = fa
 
 /** "Cancelar" do rodapé: pergunta antes de descartar o que foi preenchido */
 export function CancelarModal({ children = 'Cancelar' }) {
-  const tentarFechar = useContext(ModalContexto);
+  const contexto = useContext(ModalContexto);
   return (
-    <button type="button" className="btn" onClick={() => tentarFechar?.()}>
+    <button type="button" className="btn" disabled={contexto?.ocupado} onClick={() => contexto?.tentarFechar()}>
       {children}
     </button>
   );

@@ -22,11 +22,21 @@ export class ApiError extends Error {
 export const ehErroDeRede = (e) => Boolean(e?.rede);
 
 const PRAZO_LEITURA_MS = 15_000;
-const PRAZO_ENVIO_MS = 45_000; // foto e áudio sobem devagar no 4G
+const PRAZO_ENVIO_MS = 45_000;
+// Envio grande (visita com fotos e áudio) ganha prazo pelo tamanho: no 4G do
+// interior o upload anda a ~10 KB/s, e um prazo fixo cortava sempre o mesmo
+// envio — a nova tentativa estourava de novo e a visita nunca salvava.
+const BYTES_POR_MS = 10; // ~10 KB/s
+const prazoDoEnvio = (tamanho) => Math.max(PRAZO_ENVIO_MS, 20_000 + Math.round(tamanho / BYTES_POR_MS));
 
-function guardarTokenNovo(res) {
+/**
+ * Só vale o token novo se o guardado ainda é o mesmo com que a requisição
+ * saiu: resposta atrasada não pode ressuscitar a sessão de quem já saiu nem
+ * trocar o token de quem acabou de entrar de novo.
+ */
+function guardarTokenNovo(res, tokenUsado) {
   const novo = res.headers.get('X-Token-Novo');
-  if (novo) setToken(novo);
+  if (novo && tokenUsado && getToken() === tokenUsado) setToken(novo);
 }
 
 /**
@@ -36,21 +46,15 @@ function guardarTokenNovo(res) {
  */
 async function request(path, { method = 'GET', body, auth = true, timeout, idempotente = false } = {}) {
   const leitura = method === 'GET';
+  const corpo = body ? JSON.stringify(body) : undefined;
+  const tokenUsado = auth ? getToken() : null;
   const controle = new AbortController();
-  const prazo = setTimeout(() => controle.abort(), timeout ?? (leitura ? PRAZO_LEITURA_MS : PRAZO_ENVIO_MS));
+  const prazo = setTimeout(
+    () => controle.abort(),
+    timeout ?? (leitura ? PRAZO_LEITURA_MS : prazoDoEnvio(corpo?.length ?? 0))
+  );
 
-  let res;
-  try {
-    res = await fetch(`/api${path}`, {
-      method,
-      signal: controle.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(auth && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (erro) {
+  const erroDeRede = (erro) => {
     const estourou = erro?.name === 'AbortError';
     const mensagem = !estourou
       ? 'Sem sinal agora. Seus dados continuam aqui; tente de novo.'
@@ -59,17 +63,34 @@ async function request(path, { method = 'GET', body, auth = true, timeout, idemp
         : idempotente
           ? 'Sem resposta do servidor. Seus dados continuam aqui: toque em Salvar de novo.'
           : 'A conexão caiu antes da resposta. Confira se salvou antes de repetir.';
-    throw new ApiError(mensagem, 0, { rede: true, tempo: estourou });
+    return new ApiError(mensagem, 0, { rede: true, tempo: estourou });
+  };
+
+  let res;
+  let texto = '';
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      signal: controle.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tokenUsado ? { Authorization: `Bearer ${tokenUsado}` } : {}),
+      },
+      body: corpo,
+    });
+    // O prazo cobre também a leitura do corpo: no 4G os cabeçalhos chegam e o
+    // resto às vezes trava no meio
+    texto = await res.text();
+  } catch (erro) {
+    throw erroDeRede(erro);
   } finally {
     clearTimeout(prazo);
   }
 
-  guardarTokenNovo(res);
+  guardarTokenNovo(res, tokenUsado);
 
   let dados = null;
-  let texto = '';
   try {
-    texto = await res.text();
     dados = texto ? JSON.parse(texto) : null;
   } catch {
     // Portal da operadora, proxy ou 502 devolvem HTML: não é resposta do CRM
@@ -78,7 +99,9 @@ async function request(path, { method = 'GET', body, auth = true, timeout, idemp
     });
   }
 
-  if (res.status === 401 && auth) {
+  // 401 de uma requisição feita com um token que já foi trocado (entrou de
+  // novo, saiu) não mexe na sessão atual
+  if (res.status === 401 && auth && getToken() === tokenUsado) {
     const code = dados?.code ?? 'sessao_vencida';
     // Sessão vencida: o token velho sai, mas a tela continua montada e só pede
     // a senha de novo. Senha trocada ou usuário sem acesso: sai de vez.
@@ -194,16 +217,16 @@ export const endpoints = {
   // Vídeo e áudio sobem em binário puro: base64 inflaria 33% e estouraria o
   // limite do corpo JSON.
   enviarArquivoMaterial: async (arquivo) => {
+    const tokenUsado = getToken();
     const res = await fetch('/api/content/library/arquivo', {
       method: 'POST',
       headers: {
         'Content-Type': arquivo.type || 'application/octet-stream',
-        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        ...(tokenUsado ? { Authorization: `Bearer ${tokenUsado}` } : {}),
       },
       body: arquivo,
     });
-    const novo = res.headers.get('X-Token-Novo');
-    if (novo) setToken(novo);
+    guardarTokenNovo(res, tokenUsado);
     const dados = await res.json().catch(() => null);
     if (!res.ok) throw new ApiError(dados?.error ?? 'Não consegui enviar o arquivo.', res.status);
     return dados;

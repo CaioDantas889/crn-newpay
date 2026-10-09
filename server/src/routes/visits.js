@@ -80,22 +80,29 @@ router.post('/', (req, res) => {
     return res.status(403).json({ error: 'Cliente de outra carteira.' });
   }
 
+  // App aberto numa versão anterior ainda manda os nomes antigos
+  const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
+  if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
+
   // Reenvio da mesma visita (o 4G caiu depois de o servidor gravar): devolve a
   // que já está salva, sem gravar outra visita, concluir follow-up ou fechar
-  // outra venda
+  // outra venda. Mesma chave com outro cliente ou outro resultado não é
+  // reenvio: avisa em vez de esconder o que mudou.
   const chave = typeof b.chave === 'string' ? b.chave.slice(0, 64) : '';
   if (chave) {
     const jaSalva = table('visits').find((v) => v.chave === chave && v.userId === req.user.id);
-    if (jaSalva) {
+    if (jaSalva && jaSalva.clientId === cliente.id && jaSalva.resultado === resultado) {
       return res.status(200).json({
         visita: expandir(jaSalva), retorno: null, negocio: null, cliente: find('clients', cliente.id), avisos: [], repetido: true,
       });
     }
+    if (jaSalva) {
+      const antes = resultadoVisita(jaSalva.resultado)?.label ?? jaSalva.resultado;
+      return res.status(409).json({
+        error: `Esta visita já tinha sido salva como "${antes}". Feche e registre uma nova visita para mudar.`,
+      });
+    }
   }
-
-  // App aberto numa versão anterior ainda manda os nomes antigos
-  const resultado = RESULTADOS_VISITA[b.resultado] ? b.resultado : RESULTADOS_VISITA_ANTIGOS[b.resultado]?.novo;
-  if (!resultado) return res.status(400).json({ error: 'Informe o resultado da visita.' });
 
   // Venda sem tabela ou sem modelo não entra; o que a proposta aberta já tem vale
   if (resultado === 'fechado') {

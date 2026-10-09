@@ -21,6 +21,7 @@ router.get('/', (req, res) => {
   const minhaPosicao = ranking.find((r) => r.vendedor.id === userId);
 
   const hojeChave = dateKey();
+  const expedienteAberto = table('jornadas').some((j) => j.userId === userId && !j.fimAt);
   const kpiDeHoje = table('dailyKpis').find((k) => k.userId === userId && k.date === hojeChave);
 
   const agora = new Date();
@@ -65,10 +66,10 @@ router.get('/', (req, res) => {
       registrado: kpiDeHoje ?? null,
       // O convite para fechar o dia depende do ponto: aberto, leva a encerrar
       // o expediente junto; encerrado hoje, já pode fechar a qualquer hora
-      expedienteAberto: table('jornadas').some((j) => j.userId === userId && !j.fimAt),
-      expedienteEncerradoHoje: table('jornadas').some(
-        (j) => j.userId === userId && j.fimAt && dateKey(new Date(j.inicioAt)) === hojeChave
-      ),
+      expedienteAberto,
+      expedienteEncerradoHoje:
+        !expedienteAberto &&
+        table('jornadas').some((j) => j.userId === userId && j.fimAt && dateKey(new Date(j.inicioAt)) === hojeChave),
     },
     proximosCompromissos: proximos,
     clientesQuentes,

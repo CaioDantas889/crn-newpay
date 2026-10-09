@@ -675,7 +675,7 @@ export default function ClienteDetalhe() {
           onConfirmar={async () => {
             const r = await endpoints.excluirCliente(cliente.id);
             toast(`${r.removidos.cliente} removido da carteira.`);
-            navigate('/carteira');
+            navigate('/carteira', { replace: true });
           }}
         />
       )}

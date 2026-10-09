@@ -329,6 +329,32 @@ if (revisitaPendente) {
   ok(true, 'revisita do follow-up sem GPS', 'nenhuma revisita pendente no banco de teste (pulado)');
 }
 
+// Mesma chave de visita com outro resultado não é reenvio: avisa em vez de esconder
+const visitaChaveOutra = await api('/api/visits', {
+  token: vendedor, method: 'POST', body: { chave: chaveVisita, clientId: alvo.id, resultado: 'quente', lat: -6.36, lng: -39.3 },
+});
+ok(visitaChaveOutra.status === 409, 'mesma chave com outro resultado é recusada (não some a mudança)', visitaChaveOutra.json?.error);
+
+// Follow-up: o reenvio do mesmo formulário é reconhecido; concluído por outro caminho, não
+let fupChave = null;
+for (const c of clientes.json.slice(0, 80)) {
+  const ficha = (await api(`/api/clients/${c.id}`, { token: vendedor })).json;
+  fupChave = ficha?.followups?.find((x) => x.status === 'pendente' && x.acao !== 'revisita' && !ficha.origem) ?? null;
+  if (fupChave) break;
+}
+if (fupChave) {
+  const corpoFup = { chave: `fup-${Date.now()}`, resultado: 'morno', notes: 'chave do follow-up' };
+  const fup1 = await api(`/api/followups/${fupChave.id}/concluir`, { token: vendedor, method: 'POST', body: corpoFup });
+  const fup2 = await api(`/api/followups/${fupChave.id}/concluir`, { token: vendedor, method: 'POST', body: corpoFup });
+  const fup3 = await api(`/api/followups/${fupChave.id}/concluir`, {
+    token: vendedor, method: 'POST', body: { ...corpoFup, chave: 'outro-formulario' },
+  });
+  ok(fup1.status === 200 && fup2.status === 200 && fup2.json?.repetido === true, 'reenvio do mesmo resultado de follow-up é reconhecido');
+  ok(fup3.status === 409, 'follow-up já concluído por outro registro avisa que o novo resultado não foi salvo', fup3.json?.error?.slice(0, 70));
+} else {
+  ok(true, 'chave do follow-up', 'nenhum follow-up pendente de cliente comum (pulado)');
+}
+
 /* ----------------------------------------------------- propostas e vendas */
 secao('Propostas, vendas e ativações');
 
@@ -510,6 +536,10 @@ const fechamento = await api('/api/kpi', { token: vendedor, method: 'POST', body
 ok(fechamento.status === 201 || fechamento.status === 200, 'fechar o dia');
 ok(fechamento.json?.registro?.novosLeads === 4, 'valor informado prevalece sobre o automático');
 ok(fechamento.json?.registro?.visitas === kpi.json.calculado.visitas, 'campos em branco usam o valor do CRM');
+ok(
+  fechamento.json?.registro?.calculadoNoFechamento?.visitas === kpi.json.calculado.visitas,
+  'fechamento guarda o que o CRM contava na hora (o aviso de números novos não confunde correção com novidade)'
+);
 ok((await api('/api/kpi', { token: vendedor })).json?.fechado === true, 'dia aparece como fechado');
 
 const historico = await api('/api/kpi/historico?dias=14', { token: vendedor });
@@ -869,8 +899,15 @@ await api(`/api/deals/${dealAtivo.json.id}`, { token: vendedor, method: 'DELETE'
 
 // Só o gestor, e só de propósito (?forcar=1), apaga um cliente com ativação
 const descartavel = await api('/api/clients', {
-  token: gestor, method: 'POST', body: { company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
+  token: gestor, method: 'POST', body: { chave: 'smoke-gestao-1', company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
 });
+const descartavelDeNovo = await api('/api/clients', {
+  token: gestor, method: 'POST', body: { chave: 'smoke-gestao-1', company: 'Cliente Descartável', city: 'Iguatu', ownerId: login.json.user.id },
+});
+ok(
+  descartavelDeNovo.status === 200 && descartavelDeNovo.json?.repetido === true && descartavelDeNovo.json?.id === descartavel.json?.id,
+  'cadastro da gestão repetido (resposta perdida) devolve o mesmo cliente'
+);
 await api('/api/deals', {
   token: vendedor, method: 'POST', body: { clientId: descartavel.json.id, maquinas: 1, status: 'ativado', taxaOfertada: '2mm', modelo: 'mini' },
 });

@@ -96,6 +96,13 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
   const chave = useRef(
     globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
   );
+  // Trocou o cliente, o resultado ou a venda: não é reenvio da mesma visita
+  const assinaturaVisita = `${cliente?.id ?? ''}|${resultado ?? ''}|${venda?.modelo ?? ''}|${venda?.taxaOfertada ?? ''}|${venda?.maquinas ?? ''}`;
+  const ultimaAssinatura = useRef(assinaturaVisita);
+  if (ultimaAssinatura.current !== assinaturaVisita) {
+    ultimaAssinatura.current = assinaturaVisita;
+    chave.current = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
 
   const gravadorRef = useRef(null);
   const pedacosRef = useRef([]);
@@ -269,7 +276,8 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       recarregarPlacar();
       onRegistrado?.(resposta);
       onFechar();
-      if (resultado === 'fechado') navigate(`/carteira/${cliente.id}`);
+      // replace: troca a entrada do modal no histórico (senão o voltar ficava 'morto')
+      if (resultado === 'fechado') navigate(`/carteira/${cliente.id}`, { replace: true });
     } catch (err) {
       toast(err.message, 'erro');
     } finally {
@@ -285,6 +293,7 @@ export default function RegistrarVisita({ cliente: clienteInicial, eventId, onFe
       titulo="Registrar visita"
       subtitulo={cliente ? `${cliente.company} — ${cliente.city}` : 'Revisita a quem já está na base — loja nova entra em “+ Lead”'}
       onFechar={onFechar}
+      ocupado={salvando}
       sujo={Boolean(resultado || notes.trim() || fotos.length || audio || gravando)}
       rodape={
         <>

@@ -288,7 +288,7 @@ export default function Carteira() {
           onFechar={() => setNovo(false)}
           onCriado={(cliente) => {
             recarregar();
-            navigate(`/carteira/${cliente.id}?diagnostico=1`);
+            navigate(`/carteira/${cliente.id}?diagnostico=1`, { replace: true });
           }}
         />
       )}

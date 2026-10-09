@@ -399,7 +399,7 @@ export default function Pipeline() {
       {novo && (
         <NovoCliente
           onFechar={() => setNovo(false)}
-          onCriado={(cliente) => navigate(`/carteira/${cliente.id}?diagnostico=1`)}
+          onCriado={(cliente) => navigate(`/carteira/${cliente.id}?diagnostico=1`, { replace: true })}
         />
       )}
     </>

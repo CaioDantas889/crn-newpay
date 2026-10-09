@@ -61,6 +61,7 @@ export default function DiagnosticoModal({ cliente, onFechar, onSalvo }) {
       titulo="Diagnóstico comercial"
       subtitulo={`${cliente.company} — ${cliente.city}`}
       onFechar={onFechar}
+      ocupado={salvando}
       rodape={
         <>
           <CancelarModal />

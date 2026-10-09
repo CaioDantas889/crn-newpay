@@ -349,6 +349,13 @@ function cadastrarSemProva(req, res, b) {
     return res.status(400).json({ error: 'Informe ao menos o nome ou a empresa.' });
   }
 
+  // Reenvio do mesmo cadastro (a resposta se perdeu): devolve o que já foi salvo
+  const chave = typeof b.chave === 'string' ? b.chave.slice(0, 64) : '';
+  if (chave) {
+    const jaSalvo = table('clients').find((c) => c.cadastroChave === chave && c.criadoPor === req.user.id);
+    if (jaSalvo) return res.status(200).json({ ...enriquecer(jaSalvo), repetido: true });
+  }
+
   const diagnostico = {
     maquinaAtual: b.diagnostico?.maquinaAtual ?? null,
     faturamento: b.diagnostico?.faturamento ?? null,
@@ -394,6 +401,8 @@ function cadastrarSemProva(req, res, b) {
     machines: 0,
     lastContactAt: agora,
     notes: b.notes ?? '',
+    cadastroChave: chave || null,
+    criadoPor: req.user.id,
     createdAt: agora,
   });
 

@@ -42,6 +42,7 @@ export default function AtivarMaquina({ negocio: n, onFechar, onAtivado }) {
       titulo="Ativar máquina"
       subtitulo={n.client ? `${n.client.company}${n.client.city ? ` — ${n.client.city}` : ''}` : undefined}
       onFechar={onFechar}
+      ocupado={salvando}
       rodape={
         <>
           <CancelarModal />

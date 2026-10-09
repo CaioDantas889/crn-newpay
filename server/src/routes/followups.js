@@ -83,9 +83,19 @@ router.post('/:id/concluir', async (req, res, next) => {
     if (tarefa.userId !== req.user.id && !isManager(req.user)) {
       return res.status(403).json({ error: 'Follow-up de outro vendedor.' });
     }
-    if (tarefa.status !== 'pendente') return res.status(409).json({ error: 'Este follow-up já foi concluído.' });
-
     const b = req.body ?? {};
+    const chave = typeof b.chave === 'string' ? b.chave.slice(0, 64) : '';
+    if (tarefa.status !== 'pendente') {
+      // O mesmo envio chegou antes e a resposta se perdeu no 4G: está salvo
+      if (chave && tarefa.chave === chave) {
+        return res.status(200).json({ followup: tarefa, proximo: null, negocio: null, repetido: true });
+      }
+      // Concluído por outro caminho (Visitei, auditoria): este resultado NÃO foi salvo
+      return res.status(409).json({
+        error: 'Este follow-up já tinha sido concluído por outro registro (uma visita, por exemplo). O que você preencheu agora não foi salvo: confira a ficha do cliente.',
+      });
+    }
+
     if (!RESULTADOS_VISITA[b.resultado]) {
       return res.status(400).json({ error: 'Follow-up só é concluído com o resultado do contato.' });
     }
@@ -148,6 +158,8 @@ router.post('/:id/concluir', async (req, res, next) => {
       userId: req.user.id,
       agora,
     });
+
+    if (chave) update('followups', tarefa.id, { chave });
 
     // Print com a resposta do lojista também é o que valida o remoto pendente
     let atual = feito.cliente;

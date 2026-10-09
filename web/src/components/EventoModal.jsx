@@ -100,6 +100,7 @@ export default function EventoModal({ evento, dataPadrao, ownerId, onFechar, onS
       titulo={editando ? 'Editar compromisso' : 'Novo compromisso'}
       subtitulo={form.scope === 'corporativo' ? 'Agenda corporativa — vale para a equipe' : 'Agenda pessoal'}
       onFechar={onFechar}
+      ocupado={salvando}
       rodape={
         <>
           {editando && (

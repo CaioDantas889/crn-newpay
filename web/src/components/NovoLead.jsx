@@ -73,14 +73,17 @@ export default function NovoLead({ onFechar, onCriado }) {
 
     consultado.current = cnpj;
     setReceita({ carregando: true });
+    let valido = true;
     endpoints
       .consultarCnpj(cnpj)
       .then((r) => {
+        if (!valido || consultado.current !== cnpj) return;
         setReceita(r);
         // A Receita preenche o que o vendedor ainda não digitou
         if (r.ok) setForm((f) => ({ ...f, company: f.company || r.nomeFantasia || r.razaoSocial }));
       })
       .catch((e) => {
+        if (!valido || consultado.current !== cnpj) return;
         // CNPJ recusado de verdade (inválido, baixado, já na base) bloqueia.
         // Falta de sinal ou Receita fora do ar não: o lead salva pendente e o
         // servidor confere depois.
@@ -88,7 +91,9 @@ export default function NovoLead({ onFechar, onCriado }) {
         consultado.current = '';
         setReceita({ semRede: true });
       });
-    return undefined;
+    return () => {
+      valido = false;
+    };
   }, [form.cnpj, presencial, tentativaCnpj]);
 
   // Quem indicou: busca entre os clientes já cadastrados
@@ -200,6 +205,7 @@ export default function NovoLead({ onFechar, onCriado }) {
       titulo="Novo lead"
       subtitulo={presencial ? 'Visita na loja — GPS, horário e foto' : 'Indicação ou WhatsApp — CNPJ e print'}
       onFechar={onFechar}
+      ocupado={salvando}
       sujo={Boolean(foto || print || resultado || Object.entries(form).some(([k, v]) => v && v !== VAZIO[k]))}
       rodape={
         <>
@@ -290,7 +296,7 @@ export default function NovoLead({ onFechar, onCriado }) {
               style={{ alignSelf: 'flex-start' }}
               onClick={() => {
                 onFechar();
-                navigate(`/carteira/${duplicado.clientId}${duplicado.seu ? '?visita=1' : ''}`);
+                navigate(`/carteira/${duplicado.clientId}${duplicado.seu ? '?visita=1' : ''}`, { replace: true });
               }}
             >
               {duplicado.seu ? '✓ Registrar visita na ficha dele' : 'Abrir a ficha'}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
@@ -39,6 +39,12 @@ export default function AgendaDia() {
   };
 
   const { dados, carregando, recarregar } = useRecurso(() => endpoints.eventosDoDia(chave, userId), [chave, userId]);
+  // Compromisso criado pelo botão + do topo: a agenda aberta se atualiza
+  useEffect(() => {
+    const aoMudar = () => recarregar();
+    window.addEventListener('newpay:agenda-mudou', aoMudar);
+    return () => window.removeEventListener('newpay:agenda-mudou', aoMudar);
+  }, [recarregar]);
   const eventos = dados?.eventos ?? [];
   const tarefas = dados?.tarefas ?? [];
   const followups = dados?.followups ?? [];

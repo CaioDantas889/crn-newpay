@@ -2,7 +2,7 @@
 // botão de ligar com roteiro, rota no mapa) e a conclusão — que só existe com
 // resultado registrado.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp } from '../state/app.jsx';
@@ -147,6 +147,9 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
   const [proximoEm, setProximoEm] = useState('');
   const [salvando, setSalvando] = useState(false);
   const gps = useLocalAgora(f.exigeGps);
+  // Uma chave por formulário: o reenvio depois de a resposta se perder no 4G é
+  // reconhecido; um follow-up concluído por outro caminho, não
+  const chave = useRef(globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
   const falta = !resultado
     ? 'Escolha o resultado do contato.'
@@ -167,6 +170,7 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
     setSalvando(true);
     try {
       const r = await endpoints.concluirFollowup(f.id, {
+        chave: chave.current,
         resultado,
         notes,
         print: print ?? undefined,
@@ -177,7 +181,9 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
         venda: resultado === 'fechado' ? venda : undefined,
       });
       toast(
-        r.negocio
+        r.repetido
+          ? 'Este resultado já estava registrado.'
+          : r.negocio
           ? `Venda registrada! ${r.negocio.maquinas} máquina(s).`
           : r.proximo
             ? `Resultado registrado. Próximo passo: ${r.proximo.passo.label.toLowerCase()}, ${quando(r.proximo.dueAt)}.`
@@ -188,10 +194,10 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       onConcluido?.(r);
       onFechar();
     } catch (erro) {
-      // "Já foi concluído": o primeiro envio chegou e a resposta se perdeu no
-      // 4G. O resultado está salvo — é só fechar.
+      // Concluído por outro caminho (uma visita, a auditoria): o que foi
+      // preenchido aqui NÃO foi salvo. Avisa e atualiza a lista.
       if (erro.status === 409) {
-        toast('Este resultado já estava registrado.');
+        toast(erro.message, 'erro');
         recarregarPlacar();
         onConcluido?.();
         onFechar();
@@ -208,6 +214,7 @@ export function ConcluirFollowup({ followup: f, onFechar, onConcluido }) {
       titulo={`${SELO[f.etapa] ?? 'Follow-up'} · ${f.passo.label}`}
       subtitulo={`${f.client.company} — ${f.client.name}`}
       onFechar={onFechar}
+      ocupado={salvando}
       sujo={Boolean(resultado || notes.trim() || print)}
       rodape={
         <>

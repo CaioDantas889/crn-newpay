@@ -33,6 +33,7 @@ export default function ConfirmarExclusao({
       titulo={titulo}
       subtitulo={alvo}
       onFechar={onFechar}
+      ocupado={excluindo}
       rodape={
         <>
           <button className="btn" onClick={onFechar} disabled={excluindo}>Cancelar</button>

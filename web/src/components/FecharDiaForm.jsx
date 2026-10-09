@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { endpoints } from '../api/client.js';
 import { useApp, useRecurso } from '../state/app.jsx';
 import { dateKey, hora, moeda } from '../lib/date.js';
-import { Carregando } from './ui.jsx';
+import { Carregando, Falha } from './ui.jsx';
 
 /**
  * modo 'pagina' (padrão): cartão completo, sempre aberto.
@@ -27,9 +27,12 @@ export default function FecharDiaForm({
 }) {
   const { meta, toast } = useApp();
   const navigate = useNavigate();
-  const { dados, recarregar, setDados } = useRecurso(() => endpoints.kpi(data), [data, versao], {
+  const { dados, carregando, recarregando, erro, recarregar, setDados } = useRecurso(() => endpoints.kpi(data), [data, versao], {
     manterAoTrocar: modo === 'atalho',
   });
+  // Trocou o dia na tela de fechamento e os números ainda são do dia anterior:
+  // nada se salva até chegarem os do dia certo
+  const numerosDeOutroDia = Boolean(dados && dados.data && dados.data !== data);
   const [valores, setValores] = useState(null);
   const [editado, setEditado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -78,26 +81,35 @@ export default function FecharDiaForm({
 
   const atalho = modo === 'atalho';
   // Só a primeira carga esconde o cartão; recarregar mantém o que está na tela
-  if (!dados || !valores) {
+  if (!atalho && erro && (!dados || numerosDeOutroDia)) {
+    return <Falha erro={erro} titulo="Não consegui carregar os números deste dia" />;
+  }
+  if (!dados || !valores || (!atalho && (carregando || numerosDeOutroDia))) {
     return atalho ? null : <div className="card"><Carregando linhas={5} /></div>;
   }
+  const ocupado = salvando || recarregando;
 
   const campos = meta?.kpisDiarios ?? [];
   const formatar = (k, origem) => (k.moeda ? moeda(origem[k.chave]) : origem[k.chave]);
   const resumo = (origem) => campos.map((k) => `${formatar(k, origem)} ${k.unidade ?? k.label.toLowerCase()}`).join(' · ');
 
-  // O que o CRM registrou depois do fechamento (o painel do gestor não vê)
-  const novos = dados.fechado
+  // O que o CRM registrou depois do fechamento (o painel do gestor não vê).
+  // Compara com o que o CRM contava na hora de fechar — não com o número que o
+  // vendedor gravou, que pode ter sido corrigido para baixo de propósito.
+  // Fechamento antigo (sem esse registro) não tem com o que comparar: sem aviso
+  const naHoraDeFechar = dados.registrado?.calculadoNoFechamento;
+  const novos = dados.fechado && naHoraDeFechar
     ? campos
-        .map((k) => ({ k, n: (dados.calculado[k.chave] ?? 0) - (dados.registrado?.[k.chave] ?? 0) }))
+        .map((k) => ({ k, n: (dados.calculado[k.chave] ?? 0) - (naHoraDeFechar[k.chave] ?? 0) }))
         .filter(({ n }) => n > 0)
     : [];
   const atualizarFechamento = async () => {
     setSalvando(true);
     try {
-      // O maior dos dois: não desfaz uma correção que o vendedor fez para cima
+      // Soma só o que entrou depois: a correção que o vendedor fez continua valendo
+      const extra = Object.fromEntries(novos.map(({ k, n }) => [k.chave, n]));
       const valoresNovos = Object.fromEntries(
-        campos.map((k) => [k.chave, Math.max(dados.registrado?.[k.chave] ?? 0, dados.calculado[k.chave] ?? 0)])
+        campos.map((k) => [k.chave, (dados.registrado?.[k.chave] ?? 0) + (extra[k.chave] ?? 0)])
       );
       const { registro, calculado } = await endpoints.fecharDia({ data, ...valoresNovos });
       setEditado(false);
@@ -115,7 +127,7 @@ export default function FecharDiaForm({
       <span className="mini crescer">
         O CRM registrou {novos.map(({ k, n }) => `+${n} ${k.unidade ?? k.label.toLowerCase()}`).join(' · ')} depois do fechamento.
       </span>
-      <button type="button" className="btn btn-sm btn-brand" onClick={atualizarFechamento} disabled={salvando}>
+      <button type="button" className="btn btn-sm btn-brand" onClick={atualizarFechamento} disabled={ocupado}>
         {salvando ? 'Atualizando...' : 'Atualizar'}
       </button>
     </div>
@@ -213,7 +225,7 @@ export default function FecharDiaForm({
       </div>
 
       <div className="card-pad" style={{ borderTop: '1px solid var(--line)' }}>
-        <button className="btn btn-brand btn-block" onClick={salvar} disabled={salvando}>
+        <button className="btn btn-brand btn-block" onClick={salvar} disabled={ocupado}>
           {salvando ? 'Salvando...' : dados.fechado ? 'Salvar correção' : '✓ Fechar o dia'}
         </button>
         <p className="mini centro" style={{ marginTop: 8 }}>

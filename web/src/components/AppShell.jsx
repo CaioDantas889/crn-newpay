@@ -343,7 +343,7 @@ export default function AppShell() {
       {modal === 'cliente' && ehGestor && (
         <NovoCliente
           onFechar={() => setModal(null)}
-          onCriado={(cliente) => navigate(`/carteira/${cliente.id}?diagnostico=1`)}
+          onCriado={(cliente) => navigate(`/carteira/${cliente.id}?diagnostico=1`, { replace: true })}
         />
       )}
       {modal === 'cliente' && !ehGestor && (
@@ -353,7 +353,9 @@ export default function AppShell() {
         <EventoModal
           dataPadrao={hoje}
           onFechar={() => setModal(null)}
-          onSalvo={() => pathname.startsWith('/dia') && navigate(0)}
+          // A agenda aberta busca de novo só os dados (recarregar a página inteira
+          // brigava com o voltar do modal e às vezes nem acontecia)
+          onSalvo={() => window.dispatchEvent(new Event('newpay:agenda-mudou'))}
         />
       )}
     </div>

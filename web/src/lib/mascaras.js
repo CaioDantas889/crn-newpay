@@ -31,8 +31,11 @@ export function mascaraDocumento(valor = '') {
  * isso virava "(55) 88999-9900", um número que não existe.
  */
 export function normalizarTelefone(valor = '') {
-  let d = somenteNumeros(valor).replace(/^0+/, '');
-  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  const bruto = String(valor).trim();
+  let d = somenteNumeros(bruto).replace(/^0+/, '');
+  // Só o formato colado: com "+" na frente, ou 55 + DDD + 9 dígitos. Um dígito
+  // a mais digitado num número de DDD 55 (RS) não pode apagar o DDD.
+  if (d.startsWith('55') && (bruto.startsWith('+') || d.length >= 13)) d = d.slice(2);
   return d.slice(0, 11);
 }
 
